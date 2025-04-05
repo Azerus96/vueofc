@@ -1,0 +1,84 @@
+/* CSS Переменные */
+:root {
+  --poker-green: #1a472a;
+  --poker-green-darker: #11301d;
+  --card-bg: white;
+  --card-red: #e44145; /* Красный для червей/бубен */
+  --card-black: #2d2d2d; /* Черный для пик/треф */
+  --slot-border: rgba(255, 255, 255, 0.3);
+  --slot-border-active: white;
+  --slot-bg-highlight: rgba(255, 255, 255, 0.1);
+  --royalty-bg: #ffc107; /* Желтый для роялти */
+  --royalty-text: #333;
+  --text-light: #f0f0f0;
+  --text-dark: #333;
+  --button-primary-bg: #e53935; /* Красная кнопка как в видео */
+  --button-primary-hover: #c62828;
+  --button-disabled-bg: #757575;
+  --discard-marker-bg: rgba(255, 193, 7, 0.85); /* Желтый X */
+  --foul-border: #e44145;
+  --active-player-border: lightgreen;
+  --dealer-chip-bg: orange;
+  --dealer-chip-text: black;
+}
+
+/* Базовые стили */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--poker-green);
+  color: var(--text-light);
+  min-height: 100vh;
+  overscroll-behavior: none; /* Предотвратить "pull-to-refresh" */
+  -webkit-tap-highlight-color: transparent; /* Убрать синюю подсветку при тапе */
+  font-size: 16px; /* Базовый размер шрифта */
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-width: 600px; /* Ограничение ширины для удобства на десктопе */
+  margin: 0 auto;
+  padding: 5px;
+  box-sizing: border-box;
+  overflow: hidden; /* Предотвратить скролл основной страницы */
+}
+
+/* Стили для карт и слотов (базовые, будут уточнены в компонентах) */
+.card {
+  border-radius: 5px;
+  background-color: var(--card-bg);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-weight: bold;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  aspect-ratio: 2.5 / 3.5; /* Соотношение сторон карты */
+  min-width: 40px;
+  font-size: clamp(16px, 4vw, 22px); /* Адаптивный шрифт */
+  transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, opacity 0.2s;
+}
+
+.card-slot {
+  border: 2px dashed var(--slot-border);
+  border-radius: 5px;
+  aspect-ratio: 2.5 / 3.5;
+  min-width: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: background-color 0.2s, border-color 0.2s;
+  width: 100%; /* Занять ширину в ряду */
+  height: auto; /* Высота по aspect-ratio */
+  position: relative;
+}
