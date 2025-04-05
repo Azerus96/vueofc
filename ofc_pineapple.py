@@ -25,7 +25,7 @@ BOTTOM_SLOTS = list(range(TOP_ROW_SIZE + MIDDLE_ROW_SIZE, TOTAL_CARDS_PLACED)) #
 ALL_SLOTS = list(range(TOTAL_CARDS_PLACED))
 
 # Улицы и Фазы (уточненные)
-STREET_PREDEAL = 0 # Техническая фаза до сдачи
+STREET_PREDEAL = 0
 STREET_FIRST_DEAL_P1 = 1 # Сдача 5 карт P1
 STREET_FIRST_PLACE_P1 = 2 # Размещение P1
 STREET_FIRST_DEAL_P2 = 3 # Сдача 5 карт P2
@@ -106,75 +106,76 @@ def evaluate_hand(card_ints: List[int]) -> Tuple[int, List[int]]:
     """
     Оценивает комбинацию из 3 или 5 карт.
     Возвращает кортеж: (тип_комбинации, список_рангов_кикеров).
-    Кикеры упорядочены по важности (например, для пары QQJ82 кикеры [10, 9, 6, 0]).
-    Для стрита A2345 ранг туза считается низким (кикеры [3, 2, 1, 0, -1]).
+    Кикеры упорядочены по важности.
     """
     cards = [c for c in card_ints if c != -1] # Игнорируем пустые слоты
     n = len(cards)
-    # Исправлено: Если карт меньше 3 (для топ) или 5 (для мид/бот), это не комбинация
-    if (n < 3 and n > 0) or (n < 5 and n >= 3) : # Неполная рука, пока считаем старшей картой
+
+    # Обработка пустой руки или руки с менее чем 3 картами (для топ-линии)
+    if n == 0:
+        return (HIGH_CARD, [])
+    # Если карт 1 или 2, это всегда старшая карта
+    if n < 3:
+        ranks = sorted([card_rank(c) for c in cards], reverse=True)
+        return (HIGH_CARD, ranks)
+    # Если карт 4 (неполная средняя/нижняя), это тоже пока старшая карта
+    if n == 4:
+        ranks = sorted([card_rank(c) for c in cards], reverse=True)
+        return (HIGH_CARD, ranks)
+    # Основная логика для 3 или 5 карт
+    if n not in [3, 5]:
+         # Эта ситуация не должна возникать при правильной логике игры,
+         # но оставим заглушку на всякий случай
          ranks = sorted([card_rank(c) for c in cards], reverse=True)
+         print(f"Предупреждение: evaluate_hand вызвана с {n} картами.")
          return (HIGH_CARD, ranks)
-    elif n == 0: # Пустая рука
-         return (HIGH_CARD, [])
-    # Убрано исключение, чтобы обрабатывать неполные руки во время игры
+
 
     ranks = sorted([card_rank(c) for c in cards], reverse=True)
     suits = [card_suit(c) for c in cards]
     rank_counts = Counter(ranks)
-    most_common_ranks = rank_counts.most_common() # Список кортежей (ранг, количество)
+    most_common_ranks = rank_counts.most_common()
 
-    is_flush = n == 5 and len(set(suits)) == 1
-    # Проверка стрита (включая A-5)
-    unique_ranks = sorted(list(set(ranks)), reverse=True)
+    # --- Логика для 5 карт ---
+    is_flush = False
     is_straight = False
     straight_high_card_rank = -1
-    # Для стрита нужно 5 разных рангов (или 3 для топ, но стрит на топ невозможен)
-    if n == 5 and len(unique_ranks) >= 5:
-        # Обычный стрит
-        for i in range(len(unique_ranks) - 4):
-            if all(unique_ranks[i+j] == unique_ranks[i] - j for j in range(5)):
-                is_straight = True
-                straight_high_card_rank = unique_ranks[i]
-                break
-        # Проверка A-5 ("колесо")
-        if not is_straight and set(unique_ranks).issuperset({12, 3, 2, 1, 0}): # A, 5, 4, 3, 2
-             is_straight = True
-             straight_high_card_rank = 3 # Старшая карта в A-5 - это 5 (ранг 3)
+    if n == 5:
+        is_flush = len(set(suits)) == 1
+        unique_ranks = sorted(list(set(ranks)), reverse=True)
+        if len(unique_ranks) >= 5:
+            for i in range(len(unique_ranks) - 4):
+                if all(unique_ranks[i+j] == unique_ranks[i] - j for j in range(5)):
+                    is_straight = True
+                    straight_high_card_rank = unique_ranks[i]
+                    break
+            if not is_straight and set(unique_ranks).issuperset({12, 3, 2, 1, 0}): # A-5
+                 is_straight = True
+                 straight_high_card_rank = 3 # 5ка
 
-    # --- Определение комбинации ---
-    # (Проверяем от старшей к младшей)
+        # Стрит-флеш
+        if is_straight and is_flush:
+            return (STRAIGHT_FLUSH, [straight_high_card_rank])
+        # Каре
+        if most_common_ranks[0][1] == 4:
+            quad_rank = most_common_ranks[0][0]
+            kicker_rank = most_common_ranks[1][0]
+            return (FOUR_OF_A_KIND, [quad_rank, kicker_rank])
+        # Фулл-хаус
+        if len(most_common_ranks) > 1 and most_common_ranks[0][1] == 3 and most_common_ranks[1][1] >= 2:
+            three_rank = most_common_ranks[0][0]
+            pair_rank = most_common_ranks[1][0]
+            return (FULL_HOUSE, [three_rank, pair_rank])
+        # Флеш
+        if is_flush:
+            return (FLUSH, ranks) # Кикеры - все ранги флеша
+        # Стрит
+        if is_straight:
+            return (STRAIGHT, [straight_high_card_rank])
 
-    # Стрит-флеш (только для 5 карт)
-    if n == 5 and is_straight and is_flush:
-        kickers = [straight_high_card_rank]
-        return (STRAIGHT_FLUSH, kickers)
+    # --- Логика для 3 или 5 карт (продолжение) ---
 
-    # Каре (только для 5 карт)
-    if n == 5 and most_common_ranks[0][1] == 4:
-        quad_rank = most_common_ranks[0][0]
-        kicker_rank = most_common_ranks[1][0]
-        kickers = [quad_rank, kicker_rank]
-        return (FOUR_OF_A_KIND, kickers)
-
-    # Фулл-хаус (только для 5 карт)
-    if n == 5 and most_common_ranks[0][1] == 3 and len(most_common_ranks) > 1 and most_common_ranks[1][1] >= 2: # >=2 на случай если 2я пара не видна из-за каре
-        three_rank = most_common_ranks[0][0]
-        pair_rank = most_common_ranks[1][0]
-        kickers = [three_rank, pair_rank]
-        return (FULL_HOUSE, kickers)
-
-    # Флеш (только для 5 карт)
-    if n == 5 and is_flush:
-        kickers = ranks # Все 5 рангов флеша как кикеры
-        return (FLUSH, kickers)
-
-    # Стрит (только для 5 карт)
-    if n == 5 and is_straight:
-        kickers = [straight_high_card_rank]
-        return (STRAIGHT, kickers)
-
-    # Сет (Тройка) - может быть и в 3, и в 5 картах
+    # Сет (Тройка)
     if most_common_ranks[0][1] == 3:
         set_rank = most_common_ranks[0][0]
         other_ranks = sorted([r for r in ranks if r != set_rank], reverse=True)
@@ -189,7 +190,7 @@ def evaluate_hand(card_ints: List[int]) -> Tuple[int, List[int]]:
         kickers = [high_pair_rank, low_pair_rank, kicker_rank]
         return (TWO_PAIR, kickers)
 
-    # Пара - может быть и в 3, и в 5 картах
+    # Пара
     if most_common_ranks[0][1] == 2:
         pair_rank = most_common_ranks[0][0]
         other_ranks = sorted([r for r in ranks if r != pair_rank], reverse=True)
@@ -205,7 +206,6 @@ def evaluate_hand(card_ints: List[int]) -> Tuple[int, List[int]]:
 
 # --- Классы Игры и Состояния ---
 
-# Добавим глобальную переменную для типа игры, чтобы избежать повторения
 _GAME_TYPE = pyspiel.GameType(
     short_name="ofc_pineapple",
     long_name="Open Face Chinese Poker Pineapple",
@@ -236,7 +236,6 @@ class OFCPineappleGame(pyspiel.Game):
             max_utility=max_util,
             max_game_length=100
         )
-        # Используем глобальную _GAME_TYPE при инициализации
         super().__init__(_GAME_TYPE, game_info, params or {})
 
     def new_initial_state(self):
@@ -254,73 +253,59 @@ class OFCPineappleState(pyspiel.State):
         super().__init__(game)
         # --- Атрибуты состояния ---
         self._num_players = game.num_players()
-        self._dealer_button = 0 # Игрок 0 - дилер
-        # Определяем, кто ходит первым после дилера
+        self._dealer_button = 0
         self._next_player_to_act = (self._dealer_button + 1) % self._num_players
-        self._current_player = pyspiel.PlayerId.CHANCE # Начинаем со сдачи 1му игроку
-        self._player_to_deal_to = self._next_player_to_act # Кому сдавать карты сейчас
+        self._current_player = pyspiel.PlayerId.CHANCE
+        self._player_to_deal_to = self._next_player_to_act
 
-        self._phase = STREET_PREDEAL # Текущая фаза/улица
+        self._phase = STREET_PREDEAL
         self._deck = list(range(NUM_CARDS))
         np.random.shuffle(self._deck)
 
-        # Доска: список из 13 слотов (-1 = пусто) для каждого игрока
         self._board = [[-1] * TOTAL_CARDS_PLACED for _ in range(NUM_PLAYERS)]
-        # Карты на руках (сданные на текущей улице)
         self._current_cards = [[] for _ in range(NUM_PLAYERS)]
-        # Сброшенные карты (каждый видит только свои)
         self._discards = [[] for _ in range(NUM_PLAYERS)]
 
-        # Fantasy
-        self._in_fantasy = [False] * NUM_PLAYERS # Кто сейчас в Fantasy-раунде
-        self._fantasy_trigger = [None] * NUM_PLAYERS # Комбинация QQ+ для входа
-        self._can_enter_fantasy = [True] * NUM_PLAYERS # Может ли игрок войти в Fantasy в этом матче
-        self._fantasy_cards_count = 14 # Для обычной Fantasy
-        self._fantasy_player_has_placed = False # Разместил ли F-игрок свои 13 карт
+        self._in_fantasy = [False] * NUM_PLAYERS
+        self._fantasy_trigger = [None] * NUM_PLAYERS
+        self._can_enter_fantasy = [True] * NUM_PLAYERS
+        self._fantasy_cards_count = 14
+        self._fantasy_player_has_placed = False
 
-        # Отслеживание прогресса руки/матча
         self._total_cards_placed = [0] * NUM_PLAYERS
-        self._player_confirmed_action = False # Подтвердил ли текущий игрок свой ход на улице
+        self._player_confirmed_action = False
         self._game_over = False
-        self._cumulative_returns = [0.0] * NUM_PLAYERS # Очки за весь матч
-        self._current_hand_returns = [0.0] * NUM_PLAYERS # Очки за текущую руку (основную или Fantasy)
+        self._cumulative_returns = [0.0] * NUM_PLAYERS
+        self._current_hand_returns = [0.0] * NUM_PLAYERS
 
-        # Начинаем игру с фазы сдачи 5 карт первому игроку
         self._go_to_next_phase()
 
     def _go_to_next_phase(self):
         """Переход к следующей фазе/улице/игроку."""
-        # --- Логика переходов ---
         if self._phase == STREET_PREDEAL:
              self._phase = STREET_FIRST_DEAL_P1
              self._current_player = pyspiel.PlayerId.CHANCE
-             self._player_to_deal_to = self._next_player_to_act # Кому сдаем 5 карт
+             self._player_to_deal_to = self._next_player_to_act
         elif self._phase == STREET_FIRST_DEAL_P1:
              self._phase = STREET_FIRST_PLACE_P1
-             self._current_player = self._player_to_deal_to # Тот, кому сдали, ходит
+             self._current_player = self._player_to_deal_to
              self._player_confirmed_action = False
         elif self._phase == STREET_FIRST_PLACE_P1:
-             # Игрок 1 разместил, теперь сдаем игроку 2
              self._phase = STREET_FIRST_DEAL_P2
              self._current_player = pyspiel.PlayerId.CHANCE
              self._player_to_deal_to = (self._next_player_to_act + 1) % self._num_players
         elif self._phase == STREET_FIRST_DEAL_P2:
              self._phase = STREET_FIRST_PLACE_P2
-             self._current_player = self._player_to_deal_to # Игрок 2 ходит
+             self._current_player = self._player_to_deal_to
              self._player_confirmed_action = False
         elif self._phase == STREET_FIRST_PLACE_P2:
-             # Первая улица закончена, переходим ко второй
              self._phase = STREET_SECOND_DEAL_P1
              self._current_player = pyspiel.PlayerId.CHANCE
-             self._player_to_deal_to = self._next_player_to_act # Сдаем 3 карты первому
-        # TODO: Добавить остальные переходы для улиц 2-5
-        # TODO: Добавить переход к STREET_REGULAR_SHOWDOWN
-        # TODO: Добавить логику проверки Fantasy и переходы в фазы Fantasy
-        # TODO: Добавить логику переходов внутри Fantasy
-        # TODO: Добавить логику проверки Re-Fantasy и возврата или завершения
+             self._player_to_deal_to = self._next_player_to_act
+        # TODO: Добавить остальные переходы
         else:
              print(f"Предупреждение: Необработанный переход из фазы {self._phase}")
-             self._game_over = True # Пока завершаем игру
+             self._game_over = True
              self._current_player = pyspiel.PlayerId.TERMINAL
 
     def current_player(self):
@@ -334,32 +319,13 @@ class OFCPineappleState(pyspiel.State):
            self._current_player == pyspiel.PlayerId.TERMINAL or \
            self._current_player != player:
             return []
-
-        # TODO: Реализовать генерацию действий в зависимости от self._phase
-        # Используя self._current_cards[player] и свободные слоты в self._board[player]
-        # Пример для улицы 2-5:
-        # if self._phase >= STREET_SECOND_PLACE_P1 and self._phase <= STREET_FIFTH_PLACE_P2 and self._phase % 2 == 0: # Фазы размещения
-        #   my_cards = self._current_cards[player] # Должно быть 3 карты
-        #   if len(my_cards) != 3: return [] # Если карт нет, действий нет
-        #   free_slots_indices = [i for i, card in enumerate(self._board[player]) if card == -1]
-        #   if len(free_slots_indices) < 2: return [] # Некуда ставить
-        #
-        #   # Перебрать все комбинации: выбрать 2 карты из 3, выбрать 2 слота из свободных
-        #   for cards_to_place in itertools.combinations(my_cards, 2):
-        #       card_discard = list(set(my_cards) - set(cards_to_place))[0]
-        #       for slots in itertools.permutations(free_slots_indices, 2):
-        #           # Действие = ((карта1, слот1), (карта2, слот2), карта_сброс)
-        #           action = ( (cards_to_place[0], slots[0]), (cards_to_place[1], slots[1]), card_discard )
-        #           # TODO: Проверить, не создает ли это действие "мертвую" руку немедленно (опционально)
-        #           actions.append(action)
-
-        return actions # Placeholder
+        # TODO: Реализовать
+        return actions
 
     def _apply_action(self, action):
-        """Применяет действие (размещение карт) и переходит к след. фазе."""
-        if self._current_player == pyspiel.PlayerId.CHANCE:
-            # Логика сдачи карт (вызывается из _go_to_next_phase или явно?)
-            # В нашей схеме сдача происходит при переходе *в* фазу DEAL
+        """Применяет действие (размещение карт) или исход шанса."""
+        if self.is_chance_node():
+            # Логика сдачи карт
             player = self._player_to_deal_to
             num_cards_to_deal = 0
             if self._phase == STREET_FIRST_DEAL_P1 or self._phase == STREET_FIRST_DEAL_P2:
@@ -370,12 +336,19 @@ class OFCPineappleState(pyspiel.State):
 
             if num_cards_to_deal > 0:
                  if len(self._deck) < num_cards_to_deal: raise Exception("Недостаточно карт в колоде!")
+                 # Используем outcome (если он передается) или просто берем из колоды
+                 # В pyspiel шанс обычно обрабатывается через chance_outcomes() и apply_action(outcome)
+                 # Но для простоты пока сделаем сдачу здесь
                  self._current_cards[player] = [self._deck.pop() for _ in range(num_cards_to_deal)]
+
             self._go_to_next_phase() # Переходим к фазе размещения
             return
 
-        if self._current_player == pyspiel.PlayerId.TERMINAL:
+        # Логика применения действия игрока
+        if self.is_terminal():
              raise ValueError("Cannot apply action on terminal node")
+        if self._current_player == pyspiel.PlayerId.CHANCE:
+             raise ValueError("Cannot apply player action on chance node")
 
         player = self._current_player
         # TODO: Распарсить 'action' (кортеж)
@@ -385,7 +358,7 @@ class OFCPineappleState(pyspiel.State):
         # TODO: Обновить self._total_cards_placed[player]
         self._player_confirmed_action = True
 
-        # Переходим к следующей фазе (сдача другому игроку или след. улица)
+        # Переходим к следующей фазе
         self._go_to_next_phase()
 
     def _action_to_string(self, player, action):
@@ -399,7 +372,7 @@ class OFCPineappleState(pyspiel.State):
 
     def returns(self):
         """Возвращает накопленные очки за весь матч."""
-        # TODO: Реализовать подсчет очков в конце (в фазе SHOWDOWN)
+        # TODO: Реализовать подсчет очков
         return self._cumulative_returns
 
     def information_state_string(self, player):
@@ -408,27 +381,20 @@ class OFCPineappleState(pyspiel.State):
         parts = []
         parts.append(f"P:{player}")
         parts.append(f"Phase:{self._phase}")
-        # Своя доска
         parts.append(f"Board:[{' '.join(cards_to_strings(self._board[player]))}]")
-        # Свои карты на руках
         parts.append(f"Hand:[{' '.join(cards_to_strings(self._current_cards[player]))}]")
-        # Свой сброс
         parts.append(f"Discard:[{' '.join(cards_to_strings(self._discards[player]))}]")
 
-        # Информация об оппоненте (зависит от фазы)
         opponent = 1 - player
         opponent_board_str = f"OppBoard:[{' '.join(cards_to_strings(self._board[opponent]))}]"
-        opponent_hand_str = ""
 
-        # Видимость доски оппонента (скрыта только в Fantasy)
         is_fantasy_phase = self._phase >= PHASE_FANTASY_DEAL and self._phase <= PHASE_FANTASY_SHOWDOWN
         i_am_fantasy = self._in_fantasy[player]
-        opp_is_fantasy = self._in_fantasy[opponent]
 
         show_opp_board = True
-        if is_fantasy_phase and i_am_fantasy: # Если я в Fantasy, я не вижу доску N во время размещения
+        if is_fantasy_phase and i_am_fantasy:
              show_opp_board = False
-        if is_fantasy_phase and not i_am_fantasy: # Если я не в Fantasy, я не вижу доску F во время своей игры
+        if is_fantasy_phase and not i_am_fantasy:
              show_opp_board = False
 
         if show_opp_board:
@@ -436,12 +402,10 @@ class OFCPineappleState(pyspiel.State):
         else:
              parts.append("OppBoard:[HIDDEN]")
 
-        # Видимость руки оппонента (только на 1й улице)
         if self._phase >= STREET_FIRST_DEAL_P1 and self._phase <= STREET_FIRST_PLACE_P2:
              opponent_hand_str = f"OppHand:[{' '.join(cards_to_strings(self._current_cards[opponent]))}]"
              parts.append(opponent_hand_str)
 
-        # Статус Fantasy
         parts.append(f"Fantasy:[{int(self._in_fantasy[0])}{int(self._in_fantasy[1])}]")
 
         return " ".join(parts)
@@ -457,7 +421,7 @@ class OFCPineappleState(pyspiel.State):
         cloned._current_player = self._current_player
         cloned._dealer_button = self._dealer_button
         cloned._next_player_to_act = self._next_player_to_act
-        cloned._player_to_deal_to = self._player_to_deal_to # Добавлено
+        cloned._player_to_deal_to = self._player_to_deal_to
         cloned._phase = self._phase
         cloned._deck = self._deck[:]
         cloned._board = [row[:] for row in self._board]
@@ -482,19 +446,16 @@ class OFCPineappleState(pyspiel.State):
 
     def __str__(self):
         """Строковое представление состояния для отладки."""
-        # TODO: Улучшить
         player = self.current_player()
-        if player < 0: player = 0 # Для вывода info_state даже если ход шанса/терминал
+        if player < 0: player = 0
         return self.information_state_string(player)
 
 
 # --- Регистрация игры ---
 try:
-    # Проверяем, зарегистрирована ли игра, чтобы избежать ошибки при перезапуске
     pyspiel.load_game(_GAME_TYPE.short_name)
     print(f"Игра '{_GAME_TYPE.short_name}' уже была зарегистрирована.")
 except pyspiel.SpielError:
-    # Регистрируем, если не была зарегистрирована
     pyspiel.register_game(_GAME_TYPE, OFCPineappleGame)
     print(f"Игра '{_GAME_TYPE.short_name}' успешно зарегистрирована.")
 except Exception as e:
