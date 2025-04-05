@@ -74,7 +74,7 @@ function evaluateFiveCardHand(hand: Card[]): HandEvaluationResult {
     }
 
     if (isStraight && isFlush) {
-        const isRoyal = straightHighCard === 'A' && uniqueSortedRanks[1] === 'K'; // Check second highest for Royal
+        const isRoyal = straightHighCard === 'A' && uniqueSortedRanks[1] === 'K';
         const name = isRoyal ? 'Флеш-рояль' : 'Стрит-флеш';
         const value = calculateHandValue(9, [straightHighCard]);
         const royaltyPoints = ROYALTIES_MIDDLE[name];
@@ -197,7 +197,7 @@ function createDeck(): Card[] {
     for (const suit of SUITS) {
         for (const rank of RANKS) {
             idCounter++;
-            const display = `${rank}${SUIT_SYMBOLS[suit]}`; // Используем Unicode символ
+            const display = `${rank}${SUIT_SYMBOLS[suit]}`;
             deck.push({ id: `card-${idCounter}`, rank, suit, display });
         }
     }
