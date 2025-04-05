@@ -14,8 +14,8 @@ const gameStore = useGameStore();
 const isMenuOpen = ref(false);
 const selectedOpponentCount = ref<1 | 2>(gameStore.opponentCount);
 const draggedCardId = ref<string | null>(null);
-const draggedCardSource = ref<'hand' | 'board' | null>(null);
-const isDragging = ref(false);
+const draggedCardSource = ref<'hand' | 'board' | null>(null); // Откуда тащим карту
+const isDragging = ref(false); // Флаг активного перетаскивания
 const menuElement = ref<HTMLElement | null>(null);
 const isFullscreen = ref(!!document.fullscreenElement);
 
@@ -108,7 +108,7 @@ const handleHandDrop = (event: DragEvent) => {
     // Сброс состояния D&D происходит в handleCardDragEnd
 };
 
-// --- Touch Drag & Drop ---
+// --- Touch Drag & Drop --- (Оставляем без изменений, т.к. D&D работает)
 let touchStartX = 0; let touchStartY = 0; let ghostElement: HTMLElement | null = null;
 let currentDropTarget: HTMLElement | null = null; let touchMoved = false;
 const handleCardTouchStart = (event: TouchEvent, card: Card) => {
@@ -123,7 +123,7 @@ const handleCardTouchStart = (event: TouchEvent, card: Card) => {
     touchMoved = false;
     const touch = event.touches[0];
     touchStartX = touch.clientX; touchStartY = touch.clientY;
-    isDragging.value = true;
+    isDragging.value = true; // Устанавливаем флаг сразу
     const cardElement = event.currentTarget as HTMLElement;
     ghostElement = cardElement.cloneNode(true) as HTMLElement;
     ghostElement.style.position = 'fixed'; ghostElement.style.zIndex = '2000'; ghostElement.style.opacity = '0.8';
@@ -131,7 +131,7 @@ const handleCardTouchStart = (event: TouchEvent, card: Card) => {
     ghostElement.style.left = `${touch.clientX - cardElement.offsetWidth / 2}px`; ghostElement.style.top = `${touch.clientY - cardElement.offsetHeight / 2}px`;
     document.body.appendChild(ghostElement);
     cardElement.classList.add('dragging-source');
-    document.body.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden'; // Отключаем скролл
 };
 const handleCardTouchMove = (event: TouchEvent) => {
     if (!isDragging.value || !ghostElement) return;
@@ -208,10 +208,18 @@ onMounted(() => {
 
       <template v-if="gameStore.isGameInProgress">
         <div class="opponents-area" :class="{ 'center-opponent': gameStore.opponentCount === 1 }">
-          <template v-if="gameStore.getOpponents.length > 0">
-              <OpponentBoard v-for="opponent in gameStore.getOpponents" :key="opponent.id" :player="opponent" />
+          <!-- Убедимся, что gameStore.getOpponents существует и не пуст перед циклом -->
+          <template v-if="gameStore.getOpponents && gameStore.getOpponents.length > 0">
+              <OpponentBoard
+                v-for="opponent in gameStore.getOpponents"
+                :key="opponent.id"
+                :player="opponent"
+              />
           </template>
-           <div v-else></div>
+           <div v-else-if="gameStore.players.length > 1">
+               <!-- Показываем заглушку, если оппоненты должны быть, но их нет (ошибка?) -->
+               <p style="color: red; font-size: 0.8em;">Ошибка: Оппоненты не отображаются.</p>
+           </div>
         </div>
 
         <div class="game-message" v-if="gameStore.message">{{ gameStore.message }}</div>
