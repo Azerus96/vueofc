@@ -8,6 +8,7 @@ interface Props {
     draggedCardId: string | null;
 }
 defineProps<Props>();
+// Убрали @card-tap из emit
 const emit = defineEmits(['card-dragstart', 'card-dragend', 'card-touchstart', 'card-touchmove', 'card-touchend', 'zone-dragover', 'zone-dragleave', 'zone-drop']);
 
 const onDragStart = (event: DragEvent, card: Card) => emit('card-dragstart', event, card, 'hand');
