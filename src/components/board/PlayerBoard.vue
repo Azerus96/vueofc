@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { PlayerState, Card } from '@/types'; // Добавлен импорт Card
+import type { PlayerState, Card } from '@/types';
 import CardRow from './CardRow.vue';
 import { useGameStore } from '@/stores/game';
 
@@ -52,19 +52,19 @@ const handleCardDragEnd = (event: DragEvent) => emit('card-dragend', event);
         :combination="player.combinations.top" :royalty="player.royalties.top"
         @slot-dragover="handleDragOver" @slot-dragleave="handleDragLeave" @slot-drop="handleDrop"
         @card-dragstart="handleCardDragStart" @card-dragend="handleCardDragEnd"
-      ></CardRow> <!-- ИСПРАВЛЕНО ЗДЕСЬ -->
+      ></CardRow> <!-- Убедимся, что закрывающий тег есть -->
       <CardRow
         :row-cards="player.board.middle" :row-index="1" :player-id="player.id"
         :combination="player.combinations.middle" :royalty="player.royalties.middle"
         @slot-dragover="handleDragOver" @slot-dragleave="handleDragLeave" @slot-drop="handleDrop"
         @card-dragstart="handleCardDragStart" @card-dragend="handleCardDragEnd"
-       ></CardRow> <!-- ИСПРАВЛЕНО ЗДЕСЬ -->
+       ></CardRow> <!-- Убедимся, что закрывающий тег есть -->
       <CardRow
         :row-cards="player.board.bottom" :row-index="2" :player-id="player.id"
         :combination="player.combinations.bottom" :royalty="player.royalties.bottom"
         @slot-dragover="handleDragOver" @slot-dragleave="handleDragLeave" @slot-drop="handleDrop"
         @card-dragstart="handleCardDragStart" @card-dragend="handleCardDragEnd"
-      ></CardRow> <!-- ИСПРАВЛЕНО ЗДЕСЬ -->
+      ></CardRow> <!-- Убедимся, что закрывающий тег есть -->
     </div>
   </div>
 </template>
