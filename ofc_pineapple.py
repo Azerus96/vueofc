@@ -11,66 +11,64 @@ NUM_PLAYERS = 2
 NUM_RANKS = 13
 NUM_SUITS = 4
 NUM_CARDS = 52
-
-# Размеры рядов
 TOP_ROW_SIZE = 3
 MIDDLE_ROW_SIZE = 5
 BOTTOM_ROW_SIZE = 5
 TOTAL_CARDS_PLACED = TOP_ROW_SIZE + MIDDLE_ROW_SIZE + BOTTOM_ROW_SIZE # 13
-
-# Индексы слотов (для удобства)
-TOP_SLOTS = list(range(TOP_ROW_SIZE)) # 0, 1, 2
-MIDDLE_SLOTS = list(range(TOP_ROW_SIZE, TOP_ROW_SIZE + MIDDLE_ROW_SIZE)) # 3, 4, 5, 6, 7
-BOTTOM_SLOTS = list(range(TOP_ROW_SIZE + MIDDLE_ROW_SIZE, TOTAL_CARDS_PLACED)) # 8, 9, 10, 11, 12
+TOP_SLOTS = list(range(TOP_ROW_SIZE))
+MIDDLE_SLOTS = list(range(TOP_ROW_SIZE, TOP_ROW_SIZE + MIDDLE_ROW_SIZE))
+BOTTOM_SLOTS = list(range(TOP_ROW_SIZE + MIDDLE_ROW_SIZE, TOTAL_CARDS_PLACED))
 ALL_SLOTS = list(range(TOTAL_CARDS_PLACED))
-
-# Улицы и Фазы (уточненные)
 STREET_PREDEAL = 0
-STREET_FIRST_DEAL_P1 = 1 # Сдача 5 карт P1
-STREET_FIRST_PLACE_P1 = 2 # Размещение P1
-STREET_FIRST_DEAL_P2 = 3 # Сдача 5 карт P2
-STREET_FIRST_PLACE_P2 = 4 # Размещение P2
-STREET_SECOND_DEAL_P1 = 5 # Сдача 3 карт P1
-STREET_SECOND_PLACE_P1 = 6 # Размещение P1 (2/1)
-STREET_SECOND_DEAL_P2 = 7 # Сдача 3 карт P2
-STREET_SECOND_PLACE_P2 = 8 # Размещение P2 (2/1)
-# ... Аналогично для STREET_THIRD, STREET_FOURTH, STREET_FIFTH (9-16)
-STREET_FIFTH_PLACE_P2 = 16
-STREET_REGULAR_SHOWDOWN = 17 # Подсчет основной руки, проверка Fantasy
+STREET_FIRST_DEAL_P1 = 1
+STREET_FIRST_PLACE_P1 = 2
+STREET_FIRST_DEAL_P2 = 3
+STREET_FIRST_PLACE_P2 = 4
+STREET_SECOND_DEAL_P1 = 5
+STREET_SECOND_PLACE_P1 = 6
+STREET_SECOND_DEAL_P2 = 7
+STREET_SECOND_PLACE_P2 = 8
+STREET_THIRD_DEAL_P1 = 9
+STREET_THIRD_PLACE_P1 = 10
+STREET_THIRD_DEAL_P2 = 11
+STREET_THIRD_PLACE_P2 = 12
+STREET_FOURTH_DEAL_P1 = 13
+STREET_FOURTH_PLACE_P1 = 14
+STREET_FOURTH_DEAL_P2 = 15
+STREET_FOURTH_PLACE_P2 = 16
+STREET_FIFTH_DEAL_P1 = 17
+STREET_FIFTH_PLACE_P1 = 18
+STREET_FIFTH_DEAL_P2 = 19
+STREET_FIFTH_PLACE_P2 = 20 # Изменено
+STREET_REGULAR_SHOWDOWN = 21 # Изменено
 
-# Фазы Fantasy (для 1 на 1)
-PHASE_FANTASY_DEAL = 20 # Сдача 14 F / 5 N
-PHASE_FANTASY_N_STREET_1 = 21 # N размещает 5
-PHASE_FANTASY_F_PLACEMENT = 22 # F размещает 13/1
-PHASE_FANTASY_N_STREET_2 = 23 # N получает 3, размещает 2/1
-PHASE_FANTASY_N_STREET_3 = 24 # N получает 3, размещает 2/1
-PHASE_FANTASY_N_STREET_4 = 25 # N получает 3, размещает 2/1
-PHASE_FANTASY_N_STREET_5 = 26 # N получает 3, размещает 2/1
-PHASE_FANTASY_SHOWDOWN = 27 # Подсчет Fantasy руки, проверка Re-Fantasy
+PHASE_FANTASY_DEAL = 30 # Изменено
+PHASE_FANTASY_N_STREET_1 = 31
+PHASE_FANTASY_F_PLACEMENT = 32
+PHASE_FANTASY_N_STREET_2 = 33
+PHASE_FANTASY_N_STREET_3 = 34
+PHASE_FANTASY_N_STREET_4 = 35
+PHASE_FANTASY_N_STREET_5 = 36
+PHASE_FANTASY_SHOWDOWN = 37
 
-# Карты (0-51): Карта = rank * NUM_SUITS + suit
 RANKS = "23456789TJQKA"
-SUITS = "shdc" # spades, hearts, diamonds, clubs
+SUITS = "shdc"
 
 def card_rank(card_int: int) -> int:
-    """Возвращает ранг карты (0-12)."""
     if card_int == -1: return -1
     return card_int // NUM_SUITS
 
 def card_suit(card_int: int) -> int:
-    """Возвращает масть карты (0-3)."""
     if card_int == -1: return -1
     return card_int % NUM_SUITS
 
 def card_to_string(card_int: int) -> str:
-    """Преобразует числовое представление карты в строку (e.g., 51 -> 'Ac')."""
-    if card_int == -1: return "__" # Пустой слот
+    if card_int == -1: return "__"
     if not 0 <= card_int < NUM_CARDS:
         raise ValueError(f"Неверный код карты: {card_int}")
     return RANKS[card_rank(card_int)] + SUITS[card_suit(card_int)]
 
 def string_to_card(card_str: str) -> int:
-    """Преобразует строку карты в числовое представление (e.g., 'Ac' -> 51)."""
     if card_str == "__": return -1
     if len(card_str) != 2:
         raise ValueError(f"Неверный формат строки карты: {card_str}")
@@ -83,15 +81,11 @@ def string_to_card(card_str: str) -> int:
     return rank * NUM_SUITS + suit
 
 def cards_to_strings(card_ints: List[int]) -> List[str]:
-    """Конвертирует список числовых карт в список строк."""
     return [card_to_string(c) for c in card_ints]
 
 def strings_to_cards(card_strs: List[str]) -> List[int]:
-    """Конвертирует список строк карт в список чисел."""
     return [string_to_card(s) for s in card_strs]
 
-# --- Оценка Комбинаций ---
-# Константы для типов комбинаций (чем больше, тем лучше)
 HIGH_CARD = 0
 PAIR = 1
 TWO_PAIR = 2
@@ -100,17 +94,11 @@ STRAIGHT = 4
 FLUSH = 5
 FULL_HOUSE = 6
 FOUR_OF_A_KIND = 7
-STRAIGHT_FLUSH = 8 # Включая Royal Flush
+STRAIGHT_FLUSH = 8
 
 def evaluate_hand(card_ints: List[int]) -> Tuple[int, List[int]]:
-    """
-    Оценивает комбинацию из 3 или 5 карт.
-    Возвращает кортеж: (тип_комбинации, список_рангов_кикеров).
-    Кикеры упорядочены по важности.
-    """
-    cards = [c for c in card_ints if c != -1] # Игнорируем пустые слоты
+    cards = [c for c in card_ints if c != -1]
     n = len(cards)
-
     if n == 0: return (HIGH_CARD, [])
     if n < 3:
         ranks = sorted([card_rank(c) for c in cards], reverse=True)
@@ -177,24 +165,17 @@ def evaluate_hand(card_ints: List[int]) -> Tuple[int, List[int]]:
 
     return (HIGH_CARD, ranks)
 
-# --- Роялти и Мертвая Рука ---
-TOP_ROYALTIES_PAIR = { 4: 1, 5: 2, 6: 3, 7: 4, 8: 5, 9: 6, 10: 7, 11: 8, 12: 9 } # 66..AA
-TOP_ROYALTIES_SET = { r: 10 + r for r in range(NUM_RANKS) } # 222=10, ..., AAA=22
+TOP_ROYALTIES_PAIR = { 4: 1, 5: 2, 6: 3, 7: 4, 8: 5, 9: 6, 10: 7, 11: 8, 12: 9 }
+TOP_ROYALTIES_SET = { r: 10 + r for r in range(NUM_RANKS) }
 MIDDLE_ROYALTIES = { THREE_OF_A_KIND: 2, STRAIGHT: 4, FLUSH: 8, FULL_HOUSE: 12, FOUR_OF_A_KIND: 20, STRAIGHT_FLUSH: 30 }
 BOTTOM_ROYALTIES = { STRAIGHT: 2, FLUSH: 4, FULL_HOUSE: 6, FOUR_OF_A_KIND: 10, STRAIGHT_FLUSH: 15 }
-ROYAL_FLUSH_RANK = 12 # Ранг туза
+ROYAL_FLUSH_RANK = 12
 
 def calculate_royalties(hand_type: int, ranks: List[int], row_type: str) -> int:
-    """Рассчитывает роялти для готовой руки в указанном ряду."""
-    if not ranks: return 0 # Пустая рука - нет роялти
-
+    if not ranks: return 0
     if row_type == 'top':
-        if hand_type == THREE_OF_A_KIND:
-            set_rank = ranks[0]
-            return TOP_ROYALTIES_SET.get(set_rank, 0)
-        elif hand_type == PAIR:
-            pair_rank = ranks[0]
-            return TOP_ROYALTIES_PAIR.get(pair_rank, 0)
+        if hand_type == THREE_OF_A_KIND: return TOP_ROYALTIES_SET.get(ranks[0], 0)
+        elif hand_type == PAIR: return TOP_ROYALTIES_PAIR.get(ranks[0], 0)
         else: return 0
     elif row_type == 'middle':
         if hand_type == STRAIGHT_FLUSH and ranks[0] == ROYAL_FLUSH_RANK: return 50
@@ -205,7 +186,6 @@ def calculate_royalties(hand_type: int, ranks: List[int], row_type: str) -> int:
     else: raise ValueError(f"Неизвестный тип ряда: {row_type}")
 
 def compare_evals(eval1: Tuple[int, List[int]], eval2: Tuple[int, List[int]]) -> int:
-    """Сравнивает две оценки рук (тип + кикеры). 1: eval1>eval2, -1: eval1<eval2, 0: eval1==eval2."""
     type1, kickers1 = eval1
     type2, kickers2 = eval2
     if type1 > type2: return 1
@@ -219,14 +199,11 @@ def compare_evals(eval1: Tuple[int, List[int]], eval2: Tuple[int, List[int]]) ->
 def is_dead_hand(top_eval: Tuple[int, List[int]],
                    middle_eval: Tuple[int, List[int]],
                    bottom_eval: Tuple[int, List[int]]) -> bool:
-    """Проверяет, является ли рука 'мертвой'."""
-    # Пропускаем проверку, если какая-то из рук не полная (оценивается как HIGH_CARD с <3 или <5 картами)
-    # Это нужно, чтобы во время игры можно было ставить карты, временно нарушая порядок
-    if (len(top_eval[1]) < TOP_ROW_SIZE and len(top_eval[1]) > 0) or \
-       (len(middle_eval[1]) < MIDDLE_ROW_SIZE and len(middle_eval[1]) > 0) or \
-       (len(bottom_eval[1]) < BOTTOM_ROW_SIZE and len(bottom_eval[1]) > 0):
-        return False # Не проверяем неполные руки
-
+    """
+    Проверяет, является ли рука 'мертвой'.
+    ВАЖНО: Эта функция предполагает, что все ряды ПОЛНОСТЬЮ ЗАПОЛНЕНЫ.
+    Проверку на полноту нужно делать перед вызовом этой функции.
+    """
     if compare_evals(top_eval, middle_eval) > 0: return True
     if compare_evals(middle_eval, bottom_eval) > 0: return True
     return False
@@ -401,7 +378,7 @@ class OFCPineappleState(pyspiel.State):
         opponent_board_str = f"OppBoard:[{' '.join(cards_to_strings(self._board[opponent]))}]"
         is_fantasy_phase = self._phase >= PHASE_FANTASY_DEAL and self._phase <= PHASE_FANTASY_SHOWDOWN
         i_am_fantasy = self._in_fantasy[player]
-        show_opp_board = not is_fantasy_phase # Скрываем доску оппонента только в Fantasy
+        show_opp_board = not is_fantasy_phase
         if show_opp_board: parts.append(opponent_board_str)
         else: parts.append("OppBoard:[HIDDEN]")
         if self._phase >= STREET_FIRST_DEAL_P1 and self._phase <= STREET_FIRST_PLACE_P2:
