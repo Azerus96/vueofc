@@ -8,14 +8,13 @@ interface Props {
     draggedCardId: string | null;
 }
 defineProps<Props>();
-// Убрали @card-tap из emit
-const emit = defineEmits(['card-dragstart', 'card-dragend', 'card-touchstart', 'card-touchmove', 'card-touchend', 'zone-dragover', 'zone-dragleave', 'zone-drop']);
+// Убрали touch события и tap
+const emit = defineEmits(['card-dragstart', 'card-dragend', 'zone-dragover', 'zone-dragleave', 'zone-drop']);
 
-const onDragStart = (event: DragEvent, card: Card) => emit('card-dragstart', event, card, 'hand');
+// --- Обработчики для проброса событий ---
+const onDragStart = (event: DragEvent, card: Card) => emit('card-dragstart', event, card, 'hand'); // Явно указываем 'hand'
 const onDragEnd = (event: DragEvent) => emit('card-dragend', event);
-const onTouchStart = (event: TouchEvent, card: Card) => emit('card-touchstart', event, card);
-const onTouchMove = (event: TouchEvent) => emit('card-touchmove', event);
-const onTouchEnd = (event: TouchEvent) => emit('card-touchend', event);
+// Убрали touch обработчики
 const onZoneDragOver = (event: DragEvent) => emit('zone-dragover', event);
 const onZoneDragLeave = (event: DragEvent) => emit('zone-dragleave', event);
 const onZoneDrop = (event: DragEvent) => emit('zone-drop', event);
@@ -36,23 +35,14 @@ const onZoneDrop = (event: DragEvent) => emit('zone-drop', event);
       :is-dragging="isDraggingActive && card.id === draggedCardId"
       @dragstart="(e: DragEvent) => onDragStart(e, card)"
       @dragend="onDragEnd"
-      @touchstart="(e: TouchEvent) => onTouchStart(e, card)"
-      @touchmove="onTouchMove"
-      @touchend="onTouchEnd"
+      <!-- Убрали touch слушатели и tap -->
       />
-      <!-- Убрали isDiscardMarked и @tap -->
   </div>
 </template>
 
 <style scoped>
-.player-hand {
-  display: flex; justify-content: center; align-items: flex-end; gap: 5px;
-  padding: 5px; background-color: rgba(0, 0, 0, 0.2); border-radius: 5px;
-  min-height: auto; flex-wrap: wrap; flex-shrink: 0;
-  transition: background-color 0.2s;
-}
+/* Стили из предыдущего ответа */
+.player-hand { display: flex; justify-content: center; align-items: flex-end; gap: 5px; padding: 5px; background-color: rgba(0, 0, 0, 0.2); border-radius: 5px; min-height: auto; flex-wrap: wrap; flex-shrink: 0; transition: background-color 0.2s; }
 .player-hand.drag-over { background-color: var(--slot-bg-drag-over); }
-.player-hand :deep(.card) {
-    width: clamp(45px, 14vw, 65px); height: auto; flex-shrink: 0;
-}
+.player-hand :deep(.card) { width: clamp(45px, 14vw, 65px); height: auto; flex-shrink: 0; }
 </style>
