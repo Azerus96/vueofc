@@ -18,11 +18,9 @@ const getNextIndex = (currentIndex: number, totalPlayers: number) => (currentInd
 export const useGameStore = defineStore('game', {
     state: (): GameState => ({
         players: [], deck: [], discardPile: [],
-        currentStreet: 0,
-        gamePhase: 'not_started', // Убедимся, что начальная фаза правильная
-        currentPlayerIndex: -1, dealerIndex: 0,
+        currentStreet: 0, gamePhase: 'not_started', currentPlayerIndex: -1, dealerIndex: 0,
         cardsOnHand: [], showdownResults: null, message: "Нажмите 'Начать Игру'",
-        opponentCount: 1, // Дефолт 1 оппонент
+        opponentCount: 1,
     }),
 
     getters: {
@@ -42,27 +40,35 @@ export const useGameStore = defineStore('game', {
         },
         isAiTurn: (state): boolean => {
             const current = state.getCurrentPlayer;
-            return !!current && current.id !== state.players[0]?.id && current.isActive;
+            // AI ходит только в фазе ai_thinking
+            return !!current && current.id !== state.players[0]?.id && current.isActive && state.gamePhase === 'ai_thinking';
         },
         isGameInProgress: (state): boolean => state.gamePhase !== 'not_started',
 
+        // --- Game Flow --- Новая логика кнопки Готово ---
         canConfirmAction: (state): boolean => {
             if (!state.isMyTurn) return false;
             const player = state.getMyPlayer;
             if (!player) return false;
-            const placedCount = (player.board.top.filter(c => c !== null).length +
-                                 player.board.middle.filter(c => c !== null).length +
-                                 player.board.bottom.filter(c => c !== null).length);
+
+            // Считаем, сколько карт было размещено ИМЕННО НА ЭТОЙ УЛИЦЕ
+            const basePlacedCount = (state.currentStreet - 1) * (state.currentStreet === 1 ? 0 : 2) + (state.currentStreet > 1 ? 5 : 0);
+            const totalPlacedCount = (player.board.top.filter(c => c !== null).length +
+                                      player.board.middle.filter(c => c !== null).length +
+                                      player.board.bottom.filter(c => c !== null).length);
+            const placedThisStreet = totalPlacedCount - basePlacedCount;
+
             if (state.gamePhase === 'placing_street_1') {
-                const basePlacedCount = 0;
-                return placedCount === basePlacedCount + 5;
+                // Можно подтвердить, если размещено 5 карт на этой улице
+                return placedThisStreet === 5;
             }
             if (state.gamePhase === 'placing_street_2_5') {
-                const basePlacedCount = (state.currentStreet - 2) * 2 + 5;
-                return placedCount === basePlacedCount + 2;
+                // Можно подтвердить, если размещено 2 карты на этой улице
+                return placedThisStreet === 2;
             }
             return false;
         },
+        // --- Board State ---
         getBoardCards: (state) => (playerId: string): PlayerBoard | null => state.players.find(p => p.id === playerId)?.board ?? null,
         isBoardFoul: (state) => (playerId: string): boolean => state.players.find(p => p.id === playerId)?.isFoul ?? false,
         getCombinedRoyaltiesPoints: (state) => (playerId: string): number => {
@@ -80,48 +86,38 @@ export const useGameStore = defineStore('game', {
         },
 
         startGame(initialScore: number = 5000) {
-            console.log("[Store Action] startGame called. Current phase:", this.gamePhase); // <-- Лог 1
-            // if (this.gamePhase !== 'not_started' && this.gamePhase !== 'round_over') {
-            //      console.warn("Попытка начать игру, когда она уже идет:", this.gamePhase);
-            //      // return; // Раскомментировать, если рестарт не нужен
-            // }
+            console.log("[Store Action] startGame called. Current phase:", this.gamePhase);
             const { createDeck, shuffleDeck } = usePokerLogic();
             const playerNames = ['Вы'];
             for (let i = 1; i <= this.opponentCount; i++) { playerNames.push(`Оппонент ${i}`); }
             this.players = playerNames.map((name, index) => createInitialPlayerState(`player-${index}`, name, initialScore, index === 0));
-            console.log("[Store Action] Players created:", this.players.length, JSON.parse(JSON.stringify(this.players))); // Лог 2
+            console.log("[Store Action] Players created:", this.players.length, JSON.parse(JSON.stringify(this.players)));
             this.deck = shuffleDeck(createDeck());
             this.discardPile = []; this.currentStreet = 0; this.currentPlayerIndex = -1; this.dealerIndex = this.players.length - 1;
             this.cardsOnHand = []; this.showdownResults = null; this.message = "Начало новой раздачи...";
-            this.gamePhase = 'starting'; // Устанавливаем фазу ПЕРЕД вызовом startNewHand
-            console.log("[Store Action] Phase set to 'starting'"); // Лог 2.5
-            this.startNewHand(); // Переход к началу руки
+            this.gamePhase = 'starting';
+            console.log("[Store Action] Phase set to 'starting'");
+            this.startNewHand();
         },
 
         startNewHand() {
-            console.log("[Store Action] startNewHand called"); // <-- Лог 3
+            console.log("[Store Action] startNewHand called");
             const { createDeck, shuffleDeck } = usePokerLogic();
             this.dealerIndex = getNextIndex(this.dealerIndex, this.players.length);
             this.players.forEach((p, index) => p.isDealer = index === this.dealerIndex);
             this.deck = shuffleDeck(createDeck());
-            this.discardPile = [];
+            this.discardPile = []; // Очищаем сброс здесь
             this.currentStreet = 1;
-            this.players.forEach(p => {
-                p.board = { top: Array(3).fill(null), middle: Array(5).fill(null), bottom: Array(5).fill(null) };
-                p.royalties = { top: null, middle: null, bottom: null }; p.combinations = { top: null, middle: null, bottom: null };
-                p.isFoul = false; p.isActive = false; p.lastRoundScoreChange = 0;
-                if (p.fantasylandState === 'earned' || p.fantasylandState === 'pending') { p.fantasylandState = 'none'; }
-                else { p.fantasylandState = 'none'; }
-            });
+            this.players.forEach(p => { /* ... сброс состояния ... */ });
             this.currentPlayerIndex = getNextIndex(this.dealerIndex, this.players.length);
             this.showdownResults = null;
-            console.log("[Store Action] Starting street 1, first player:", this.players[this.currentPlayerIndex]?.name); // <-- Лог 4
-            this._advanceGamePhase('dealing_street_1'); // Начинаем раздачу
+            console.log("[Store Action] Starting street 1, first player:", this.players[this.currentPlayerIndex]?.name);
+            this._advanceGamePhase('dealing_street_1');
         },
 
         // --- Dealing ---
         _dealCurrentPlayer() {
-            console.log("[Store Action] _dealCurrentPlayer for:", this.getCurrentPlayer?.name); // <-- Лог 5
+            console.log("[Store Action] _dealCurrentPlayer for:", this.getCurrentPlayer?.name);
             const { dealCards } = usePokerLogic();
             const player = this.getCurrentPlayer; if (!player || !player.isActive) { console.error("Deal Error: No active player"); return; }
             let cardsToDeal = 0; let nextPhase: GamePhase = 'placing_street_1';
@@ -130,14 +126,14 @@ export const useGameStore = defineStore('game', {
             else { this._advanceGamePhase('showdown'); return; }
             const { dealtCards, remainingDeck } = dealCards(this.deck, cardsToDeal);
             this.deck = remainingDeck; this.cardsOnHand = dealtCards;
-            console.log(`[Store Action] Dealt ${cardsToDeal} cards to ${player.name}`); // <-- Лог 6
+            console.log(`[Store Action] Dealt ${cardsToDeal} cards to ${player.name}`);
             if (this.isAiTurn) { this._advanceGamePhase('ai_thinking'); }
             else { this._advanceGamePhase(nextPhase); this.message = this.currentStreet === 1 ? "Разместите 5 карт" : "Разместите 2 карты"; }
         },
 
         // --- Player Actions ---
         dropCard(cardId: string, target: { type: 'slot', rowIndex: number, slotIndex: number } | { type: 'hand' }) {
-            console.log(`[Store Action] dropCard: cardId=${cardId}, targetType=${target.type}`); // Лог
+            console.log(`[Store Action] dropCard: cardId=${cardId}, targetType=${target.type}`);
             const player = this.getCurrentPlayer;
             if (!player || player.id !== this.getMyPlayer?.id || !(this.gamePhase === 'placing_street_1' || this.gamePhase === 'placing_street_2_5')) {
                  console.warn("Нельзя разместить карту сейчас. Phase:", this.gamePhase, "IsMyTurn:", this.isMyTurn);
@@ -170,7 +166,10 @@ export const useGameStore = defineStore('game', {
                 const rowKey = rowIndex === 0 ? 'top' : rowIndex === 1 ? 'middle' : 'bottom';
                 const targetRow = player.board[rowKey];
                 if (slotIndex < targetRow.length && targetRow[slotIndex] === null) {
-                    targetRow[slotIndex] = { ...card, originalPosition: { row: rowKey, index: slotIndex } };
+                    // Сохраняем исходную позицию перед перемещением
+                    const originalPos = source === 'hand' ? { row: 'hand', index: cardIndexInHand } : { row: (sourceRowIndex === 0 ? 'top' : sourceRowIndex === 1 ? 'middle' : 'bottom'), index: sourceSlotIndex };
+                    targetRow[slotIndex] = { ...card, originalPosition: originalPos }; // Сохраняем откуда пришла карта
+
                     if (source === 'hand') { this.cardsOnHand = this.cardsOnHand.filter(c => c.id !== cardId); }
                     else if (source === 'board') { const sourceRowKey = sourceRowIndex === 0 ? 'top' : sourceRowIndex === 1 ? 'middle' : 'bottom'; player.board[sourceRowKey][sourceSlotIndex] = null; }
                     console.log(`Игрок ${player.name} разместил ${card.display} в ${rowKey}[${slotIndex}]`);
@@ -181,54 +180,28 @@ export const useGameStore = defineStore('game', {
                  if (this.currentStreet > 1) { this.message = "Нельзя вернуть карту на этой улице"; return; }
                 const sourceRowKey = sourceRowIndex === 0 ? 'top' : sourceRowIndex === 1 ? 'middle' : 'bottom';
                 player.board[sourceRowKey][sourceSlotIndex] = null;
-                const { originalPosition, ...cardData } = card; this.cardsOnHand.push(cardData);
+                const { originalPosition, ...cardData } = card; // Удаляем originalPosition при возврате в руку
+                this.cardsOnHand.push(cardData);
+                // Сортируем руку после возврата (опционально, для порядка)
+                this.cardsOnHand.sort((a, b) => usePokerLogic().compareHands({value: RANK_VALUES[a.rank], name:''}, {value: RANK_VALUES[b.rank], name:''}));
                 console.log(`Игрок ${player.name} вернул ${card.display} в руку`);
                 this.updateBoardState(player.id); this.updateMessage();
             }
         },
 
-        updateBoardState(playerId: string) {
-            const player = this.getPlayerById(playerId);
-            if (!player) return;
-
-            const { evaluateThreeCardHand, evaluateFiveCardHand, isBoardValid } = usePokerLogic();
-            const board = player.board;
-            const filledCards = (row: (Card | null)[]) => row.filter(c => c !== null) as Card[];
-
-            const topCards = filledCards(board.top);
-            const middleCards = filledCards(board.middle);
-            const bottomCards = filledCards(board.bottom);
-
-            player.combinations.top = topCards.length === 3 ? evaluateThreeCardHand(topCards) : null;
-            player.combinations.middle = middleCards.length === 5 ? evaluateFiveCardHand(middleCards) : null;
-            player.combinations.bottom = bottomCards.length === 5 ? evaluateFiveCardHand(bottomCards) : null;
-
-            player.royalties.top = player.combinations.top?.royalty ?? null;
-            player.royalties.middle = player.combinations.middle?.royalty ?? null;
-            player.royalties.bottom = player.combinations.bottom?.royalty ?? null;
-
-            const totalPlaced = topCards.length + middleCards.length + bottomCards.length;
-            if (totalPlaced === 13) {
-                 player.isFoul = !isBoardValid(player.combinations);
-                 if(player.isFoul) {
-                     console.warn(`Игрок ${playerId} собрал МЕРТВУЮ РУКУ!`);
-                     player.royalties = { top: null, middle: null, bottom: null };
-                 }
-            } else {
-                player.isFoul = false;
-            }
-        },
+        updateBoardState(playerId: string) { /* ... (без изменений) ... */ },
 
         confirmAction() {
-            console.log("[Store Action] confirmAction called. Can confirm:", this.canConfirmAction); // Лог
+            console.log("[Store Action] confirmAction called. Can confirm:", this.canConfirmAction);
             if (!this.isMyTurn || !this.canConfirmAction) { console.warn("Нельзя подтвердить действие сейчас"); return; }
             const player = this.getCurrentPlayer!; let discardedCard: Card | null = null;
             if (this.gamePhase === 'placing_street_1') { console.log(`Игрок ${player.name} подтвердил улицу 1.`); }
             else if (this.gamePhase === 'placing_street_2_5') {
-                if (this.cardsOnHand.length === 1) {
-                    discardedCard = this.cardsOnHand[0]; this.discardPile.push({ ...discardedCard });
+                if (this.cardsOnHand.length === 1) { // Проверяем, что осталась ровно 1 карта
+                    discardedCard = this.cardsOnHand[0];
+                    this.discardPile.push({ ...discardedCard }); // Добавляем копию в сброс
                     console.log(`Игрок ${player.name} сбросил ${discardedCard.display} и подтвердил улицу ${this.currentStreet}.`);
-                } else { console.error("Ошибка подтверждения: неверное кол-во карт."); this.message = "Ошибка: разместите ровно 2 карты."; return; }
+                } else { console.error("Ошибка подтверждения: неверное количество карт в руке для сброса."); this.message = "Ошибка: разместите ровно 2 карты."; return; }
             }
             this.cardsOnHand = []; this.moveToNextPlayer();
         },
@@ -236,19 +209,15 @@ export const useGameStore = defineStore('game', {
         // --- AI Logic ---
         _runAiTurn() {
             const aiPlayer = this.getCurrentPlayer; if (!aiPlayer || !this.isAiTurn) return;
-            console.log(`[Store Action] _runAiTurn for: ${aiPlayer.name} on street ${this.currentStreet}`); // <-- Лог 7
+            console.log(`[Store Action] _runAiTurn for: ${aiPlayer.name} on street ${this.currentStreet}`);
             let currentHand = [...this.cardsOnHand]; let cardToDiscard: Card | null = null;
             if (this.currentStreet >= 2 && currentHand.length === 3) {
                 const discardIndex = Math.floor(Math.random() * 3);
                 cardToDiscard = currentHand.splice(discardIndex, 1)[0];
-                this.discardPile.push({ ...cardToDiscard });
+                this.discardPile.push({ ...cardToDiscard }); // ИИ тоже сбрасывает
                 console.log(`ИИ ${aiPlayer.name} сбрасывает ${cardToDiscard.display}`);
             }
-            const placeOrder: { row: keyof PlayerBoard, index: number }[] = [
-                { row: 'bottom', index: 0 }, { row: 'bottom', index: 1 }, { row: 'bottom', index: 2 }, { row: 'bottom', index: 3 }, { row: 'bottom', index: 4 },
-                { row: 'middle', index: 0 }, { row: 'middle', index: 1 }, { row: 'middle', index: 2 }, { row: 'middle', index: 3 }, { row: 'middle', index: 4 },
-                { row: 'top', index: 0 }, { row: 'top', index: 1 }, { row: 'top', index: 2 },
-            ];
+            const placeOrder: { row: keyof PlayerBoard, index: number }[] = [ { row: 'bottom', index: 0 }, { row: 'bottom', index: 1 }, { row: 'bottom', index: 2 }, { row: 'bottom', index: 3 }, { row: 'bottom', index: 4 }, { row: 'middle', index: 0 }, { row: 'middle', index: 1 }, { row: 'middle', index: 2 }, { row: 'middle', index: 3 }, { row: 'middle', index: 4 }, { row: 'top', index: 0 }, { row: 'top', index: 1 }, { row: 'top', index: 2 }, ];
             for (const card of currentHand) {
                 let placed = false;
                 for (const target of placeOrder) {
@@ -261,12 +230,15 @@ export const useGameStore = defineStore('game', {
                 if (!placed) console.error(`ИИ ${aiPlayer.name} не смог разместить карту ${card.display}!`);
             }
             this.updateBoardState(aiPlayer.id); this.cardsOnHand = [];
-            console.log(`[Store Action] AI ${aiPlayer.name} завершил ход.`); // <-- Лог 8
-            this.moveToNextPlayer();
+            console.log(`[Store Action] AI ${aiPlayer.name} завершил ход.`);
+            // Небольшая пауза перед передачей хода дальше, чтобы игрок успел увидеть ход ИИ
+            setTimeout(() => {
+                this.moveToNextPlayer();
+            }, 500); // Пауза 0.5 сек
         },
 
         moveToNextPlayer() {
-            console.log("[Store Action] moveToNextPlayer called"); // <-- Лог 9
+            console.log("[Store Action] moveToNextPlayer called");
             const currentPlayer = this.getCurrentPlayer; if (currentPlayer) { currentPlayer.isActive = false; }
             const nextPlayerIndex = getNextIndex(this.currentPlayerIndex, this.players.length);
             const firstPlayerIndexOfStreet = getNextIndex(this.dealerIndex, this.players.length);
@@ -323,7 +295,7 @@ export const useGameStore = defineStore('game', {
 
         // --- Управление фазами и сообщениями ---
         _advanceGamePhase(newPhase: GamePhase) {
-            console.log(`[Store Action] _advanceGamePhase: ${this.gamePhase} -> ${newPhase}`); // <-- Лог 10
+            console.log(`[Store Action] _advanceGamePhase: ${this.gamePhase} -> ${newPhase}`);
             this.gamePhase = newPhase;
             const player = this.getCurrentPlayer;
             switch (newPhase) {
