@@ -44,10 +44,10 @@ const isBoardFoul = computed(() => gameStore.isBoardFoul(props.playerId));
           :card="card"
           :row-index="rowIndex"
           :slot-index="index"
-          :is-highlighted="isHighlighted && !card"  // Подсвечиваем только пустые слоты
-          :is-foul="isBoardFoul" // Передаем статус фола в слот
+          :is-highlighted="isHighlighted && !card"  
+          :is-foul="isBoardFoul" 
           @click="handleSlotClick(index)"
-        />
+        ></CardSlot> <!-- ИЗМЕНЕНИЕ ЗДЕСЬ: Заменили /> на ></CardSlot> -->
       </div>
       <!-- Отображаем инфо только если есть комбинация -->
       <div class="row-info" v-if="combination">
