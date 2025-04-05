@@ -1,0 +1,27 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": ["env.d.ts", "src/**/*", "src/**/*.vue"],
+  "exclude": ["src/**/__tests__/*"],
+  "compilerOptions": {
+    "composite": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+     // Добавим опции для улучшения совместимости и строгости
+    "target": "ESNext",          // Используем современные возможности JS
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler", // Современный способ разрешения модулей
+    "allowJs": true,             // Разрешить импорт JS файлов
+    "strict": true,              // Включить все строгие проверки типов
+    "noUnusedLocals": true,      // Ошибка, если есть неиспользуемые локальные переменные
+    "noUnusedParameters": true,  // Ошибка, если есть неиспользуемые параметры
+    "noImplicitReturns": true,   // Ошибка, если функция не всегда возвращает значение
+    "noFallthroughCasesInSwitch": true, // Ошибка при "проваливании" в switch
+    "jsx": "preserve",           // Настройка для Vue JSX (если используется)
+    "allowSyntheticDefaultImports": true, // Для совместимости с некоторыми библиотеками
+    "forceConsistentCasingInFileNames": true, // Строгость в именах файлов
+    "skipLibCheck": true         // Пропускать проверку типов в библиотеках (ускоряет сборку)
+  }
+}
