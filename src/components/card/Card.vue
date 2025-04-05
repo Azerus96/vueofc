@@ -10,7 +10,8 @@ interface Props {
 const props = withDefaults(defineProps<Props>(), {
     isDraggable: true,
 });
-const emit = defineEmits(['dragstart', 'dragend', 'touchstart', 'touchmove', 'touchend']);
+// Убрали touch события из emit
+const emit = defineEmits(['dragstart', 'dragend']);
 
 const suitSymbol = computed(() => {
   if (!props.card) return '';
@@ -41,12 +42,7 @@ const onDragStart = (event: DragEvent) => {
     else event.preventDefault();
 };
 const onDragEnd = (event: DragEvent) => emit('dragend', event);
-const onTouchStart = (event: TouchEvent) => {
-    if (props.card && props.isDraggable) emit('touchstart', event, props.card);
-};
-// Убрали .passive, чтобы иметь возможность вызвать preventDefault если нужно (хотя пока не используем)
-const onTouchMove = (event: TouchEvent) => emit('touchmove', event);
-const onTouchEnd = (event: TouchEvent) => emit('touchend', event);
+// Убрали onTouchStart, onTouchMove, onTouchEnd
 
 </script>
 
@@ -58,9 +54,7 @@ const onTouchEnd = (event: TouchEvent) => emit('touchend', event);
     :draggable="isDraggable"
     @dragstart="onDragStart"
     @dragend="onDragEnd"
-    @touchstart="onTouchStart"
-    @touchmove="onTouchMove"
-    @touchend="onTouchEnd"
+    <!-- Убрали touch слушатели -->
   >
     <div class="card-content">{{ cardDisplay }}</div>
   </div>
@@ -69,7 +63,7 @@ const onTouchEnd = (event: TouchEvent) => emit('touchend', event);
 
 <style scoped>
 /* Стили из предыдущего ответа */
-.card { cursor: grab; touch-action: none; }
+.card { cursor: grab; /* touch-action: none; Убрали, т.к. нет touch D&D */ }
 .card:not([draggable="true"]) { cursor: default; }
 .card.dragging { opacity: 0.4 !important; cursor: grabbing; }
 .card-content { text-align: center; line-height: 1; pointer-events: none; color: var(--card-black) !important; }
