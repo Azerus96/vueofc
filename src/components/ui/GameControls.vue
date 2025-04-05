@@ -4,22 +4,11 @@ import { computed } from 'vue';
 
 const gameStore = useGameStore();
 
-const buttonText = computed(() => {
-    if (gameStore.canConfirmAction) {
-        if (gameStore.gamePhase === 'placing_street_1') {
-            return 'Готово';
-        }
-        if (gameStore.gamePhase === 'placing_street_2_5') {
-            // На улицах 2-5 кнопка "Готово" появляется, когда 2 карты размещены
-            return 'Готово'; // Текст всегда "Готово", т.к. сброс автоматический
-        }
-    }
-    // Если действие нельзя подтвердить, кнопку не показываем или показываем неактивной
-    // В данном случае просто не показываем (v-if в шаблоне)
-    return '';
-});
-
+// Кнопка активна, если можно подтвердить действие
 const isButtonActive = computed(() => gameStore.canConfirmAction);
+
+// Текст кнопки теперь всегда "Готово", если она активна
+const buttonText = computed(() => isButtonActive.value ? 'Готово' : '');
 
 const handleConfirm = () => {
     if (isButtonActive.value) {
@@ -44,7 +33,7 @@ const handleConfirm = () => {
 
 <style scoped>
 /* Стили из предыдущего ответа */
-.game-controls { display: flex; justify-content: center; padding: 5px 0; flex-shrink: 0; min-height: 45px; /* Резервируем место под кнопку */}
+.game-controls { display: flex; justify-content: center; padding: 5px 0; flex-shrink: 0; min-height: 45px; }
 .control-button {
   padding: 10px 20px; font-size: clamp(14px, 3.8vw, 17px); font-weight: bold;
   background-color: var(--button-primary-bg); color: white; border: none; border-radius: 25px;
@@ -53,5 +42,5 @@ const handleConfirm = () => {
 }
 .control-button:hover:not(:disabled) { background-color: var(--button-primary-hover); }
 .control-button:active:not(:disabled) { transform: scale(0.98); box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-/* Убрали стиль :disabled, т.к. кнопка просто не рендерится */
+/* Убрали стиль :disabled */
 </style>
