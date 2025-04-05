@@ -5,14 +5,14 @@ import PlayerBoard from '@/components/board/PlayerBoard.vue';
 import OpponentBoard from '@/components/board/OpponentBoard.vue';
 import PlayerHand from '@/components/ui/PlayerHand.vue';
 import GameControls from '@/components/ui/GameControls.vue';
-import DiscardPile from '@/components/ui/DiscardPile.vue'; // Импорт нового компонента
+import DiscardPile from '@/components/ui/DiscardPile.vue';
 import type { Card } from '@/types';
 
 const gameStore = useGameStore();
 const isMenuOpen = ref(false);
 const selectedOpponentCount = ref<1 | 2>(gameStore.opponentCount);
 const draggedCardId = ref<string | null>(null);
-const draggedCardSource = ref<'hand' | 'board' | null>(null); // Откуда тащим карту
+const draggedCardSource = ref<'hand' | 'board' | null>(null);
 const isDragging = ref(false);
 const menuElement = ref<HTMLElement | null>(null);
 const isFullscreen = ref(!!document.fullscreenElement);
@@ -37,7 +37,10 @@ watch(isMenuOpen, (isOpen) => {
 });
 
 // --- Старт игры ---
-const handleStartGame = () => { gameStore.startGame(); };
+const handleStartGame = () => {
+    console.log("Нажата кнопка 'Начать Игру'"); // <-- Добавлен лог
+    gameStore.startGame();
+};
 
 // --- Полноэкранный режим ---
 const toggleFullScreen = () => {
@@ -49,17 +52,9 @@ document.addEventListener('fullscreenchange', () => { isFullscreen.value = !!doc
 // --- Логика Drag & Drop ---
 const handleCardDragStart = (event: DragEvent, card: Card, source: 'hand' | 'board') => {
     if (!gameStore.isMyTurn) return;
-    // Запрещаем D&D с доски на улицах 2-5
-    if (source === 'board' && gameStore.currentStreet > 1) {
-        event.preventDefault();
-        gameStore.message = "Нельзя вернуть карту на этой улице";
-        return;
-    }
-    draggedCardId.value = card.id;
-    draggedCardSource.value = source; // Запоминаем источник
-    isDragging.value = true;
-    event.dataTransfer!.setData('text/plain', card.id);
-    event.dataTransfer!.effectAllowed = 'move';
+    if (source === 'board' && gameStore.currentStreet > 1) { event.preventDefault(); gameStore.message = "Нельзя вернуть карту на этой улице"; return; }
+    draggedCardId.value = card.id; draggedCardSource.value = source; isDragging.value = true;
+    event.dataTransfer!.setData('text/plain', card.id); event.dataTransfer!.effectAllowed = 'move';
 };
 const handleCardDragEnd = () => {
     draggedCardId.value = null; draggedCardSource.value = null; isDragging.value = false;
@@ -79,16 +74,10 @@ const handleSlotDrop = (event: DragEvent, rowIndex: number, slotIndex: number) =
     }
     draggedCardId.value = null; draggedCardSource.value = null; isDragging.value = false;
 };
-// D&D для руки (возврат карты)
 const handleHandDragOver = (event: DragEvent) => {
     event.preventDefault();
-    // Разрешаем drop только если тащим с доски и на 1й улице
-    if (draggedCardSource.value === 'board' && gameStore.currentStreet === 1) {
-        (event.currentTarget as HTMLElement).classList.add('drag-over');
-        event.dataTransfer!.dropEffect = 'move';
-    } else {
-        event.dataTransfer!.dropEffect = 'none';
-    }
+    if (draggedCardSource.value === 'board' && gameStore.currentStreet === 1) { (event.currentTarget as HTMLElement).classList.add('drag-over'); event.dataTransfer!.dropEffect = 'move'; }
+    else { event.dataTransfer!.dropEffect = 'none'; }
 };
 const handleHandDragLeave = (event: DragEvent) => { (event.currentTarget as HTMLElement).classList.remove('drag-over'); };
 const handleHandDrop = (event: DragEvent) => {
@@ -100,13 +89,14 @@ const handleHandDrop = (event: DragEvent) => {
     draggedCardId.value = null; draggedCardSource.value = null; isDragging.value = false;
 };
 
-// --- Touch Drag & Drop --- (Оставляем без изменений, т.к. D&D работает)
+// --- Touch Drag & Drop --- (Без изменений)
+let touchStartX = 0; let touchStartY = 0; let ghostElement: HTMLElement | null = null;
+let currentDropTarget: HTMLElement | null = null; let touchMoved = false;
+const handleCardTouchStart = (event: TouchEvent, card: Card) => { /* ... */ };
+const handleCardTouchMove = (event: TouchEvent) => { /* ... */ };
+const handleCardTouchEnd = (event: TouchEvent) => { /* ... */ };
 
-// Вычисляем классы для основного контейнера игры
-const gameContainerClass = computed(() => ({
-    'game-container': true,
-    'one-opponent': gameStore.opponentCount === 1,
-}));
+const gameContainerClass = computed(() => ({ 'game-container': true, 'one-opponent': gameStore.opponentCount === 1, }));
 
 </script>
 
@@ -130,7 +120,9 @@ const gameContainerClass = computed(() => ({
     </div>
 
     <div :class="gameContainerClass">
-      <button v-if="!gameStore.isGameInProgress" @click="handleStartGame" class="start-game-button">Начать Игру</button>
+      <button v-if="!gameStore.isGameInProgress" @click="handleStartGame" class="start-game-button">
+          Начать Игру
+      </button>
 
       <template v-if="gameStore.isGameInProgress">
         <div class="opponents-area" :class="{ 'center-opponent': gameStore.opponentCount === 1 }">
@@ -147,12 +139,9 @@ const gameContainerClass = computed(() => ({
                  @card-dragstart="(event: DragEvent, card: Card) => handleCardDragStart(event, card, 'board')"
                  @card-dragend="handleCardDragEnd"
                  />
-                 <!-- Добавлены обработчики D&D для карт на доске -->
             </div>
-            <!-- Пустой див для выравнивания, если нужно -->
             <div class="discard-placeholder"></div>
         </div>
-
 
         <PlayerHand
             v-if="gameStore.cardsOnHand.length > 0 && gameStore.getMyPlayer?.isActive"
@@ -168,7 +157,6 @@ const gameContainerClass = computed(() => ({
             @zone-dragleave="handleHandDragLeave"
             @zone-drop="handleHandDrop"
          />
-         <!-- Убрали @card-tap, т.к. сброс теперь автоматический -->
 
         <GameControls v-if="gameStore.isMyTurn" />
       </template>
@@ -177,33 +165,15 @@ const gameContainerClass = computed(() => ({
 </template>
 
 <style scoped>
+/* Стили из main.css */
 #app-container { position: relative; min-height: 100vh; }
-.game-container {
-  display: flex; flex-direction: column; min-height: 100vh;
-  padding: 5px; padding-top: 50px; /* Уменьшен верхний отступ */ gap: 5px;
-}
-/* Стили для 1 оппонента */
+.game-container { display: flex; flex-direction: column; min-height: 100vh; padding: 5px; padding-top: 50px; gap: 5px; }
 .game-container.one-opponent .opponents-area { justify-content: center; }
-.game-container.one-opponent .opponent-board { width: 65%; /* Делаем одного оппонента шире */ }
-.game-container.one-opponent .player-board { max-width: 380px; /* Уменьшаем доску игрока */ }
-
+.game-container.one-opponent .opponent-board { width: 65%; }
+.game-container.one-opponent .player-board { max-width: 380px; }
 .opponents-area { display: flex; justify-content: space-around; gap: 4px; flex-shrink: 0; }
-.game-message {
-    text-align: center; padding: 3px; font-size: 0.85em; min-height: 1.1em; flex-shrink: 0;
-    color: var(--text-light); background-color: rgba(0,0,0,0.2); border-radius: 4px;
-}
-.player-section {
-    display: flex;
-    align-items: flex-start; /* Выравниваем по верху */
-    gap: 5px;
-    flex-grow: 1; /* Занимает основное место */
-}
-.player-area {
-    flex-grow: 1; /* Основная область для доски */
-    display: flex; justify-content: center; align-items: center;
-}
-.discard-placeholder, .discard-pile {
-    width: 55px; /* Ширина колонки сброса (примерно ширина карты + отступ) */
-    flex-shrink: 0;
-}
+.game-message { text-align: center; padding: 3px; font-size: 0.85em; min-height: 1.1em; flex-shrink: 0; color: var(--text-light); background-color: rgba(0,0,0,0.2); border-radius: 4px; }
+.player-section { display: flex; align-items: flex-start; gap: 5px; flex-grow: 1; }
+.player-area { flex-grow: 1; display: flex; justify-content: center; align-items: center; }
+.discard-placeholder, .discard-pile { width: 55px; flex-shrink: 0; }
 </style>
