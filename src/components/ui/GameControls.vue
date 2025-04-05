@@ -3,12 +3,14 @@ import { useGameStore } from '@/stores/game';
 import { computed } from 'vue';
 
 const gameStore = useGameStore();
-
-// Кнопка активна, если можно подтвердить действие
 const isButtonActive = computed(() => gameStore.canConfirmAction);
 
-// Текст кнопки теперь всегда "Готово", если она активна
-const buttonText = computed(() => isButtonActive.value ? 'Готово' : '');
+const buttonText = computed(() => {
+    if (isButtonActive.value) { // Показываем текст только если кнопка активна
+        return 'Готово'; // Текст всегда "Готово"
+    }
+    return ''; // Не показывать текст (и кнопку), если действие нельзя подтвердить
+});
 
 const handleConfirm = () => {
     if (isButtonActive.value) {
@@ -20,7 +22,6 @@ const handleConfirm = () => {
 
 <template>
   <div class="game-controls">
-    <!-- Кнопка показывается только если действие можно подтвердить -->
     <button
       v-if="isButtonActive"
       @click="handleConfirm"
@@ -42,5 +43,4 @@ const handleConfirm = () => {
 }
 .control-button:hover:not(:disabled) { background-color: var(--button-primary-hover); }
 .control-button:active:not(:disabled) { transform: scale(0.98); box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
-/* Убрали стиль :disabled */
 </style>
