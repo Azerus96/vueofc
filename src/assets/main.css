@@ -4,18 +4,18 @@
   --poker-green-darker: #11301d;
   --card-bg: white;
   --card-red: #e44145;
-  --card-black: #2d2d2d;
+  --card-black: #2d2d2d; /* Черный цвет для ранга и масти */
   --slot-border: rgba(255, 255, 255, 0.3);
   --slot-border-active: white;
   --slot-bg-highlight: rgba(255, 255, 255, 0.1);
-  --slot-bg-drag-over: rgba(255, 255, 255, 0.25); /* Фон при наведении карты */
+  --slot-bg-drag-over: rgba(255, 255, 255, 0.25);
   --royalty-bg: #ffc107;
   --royalty-text: #333;
   --text-light: #f0f0f0;
   --text-dark: #333;
   --button-primary-bg: #e53935;
   --button-primary-hover: #c62828;
-  --button-secondary-bg: #424242; /* Для кнопки настроек */
+  --button-secondary-bg: #424242;
   --button-secondary-hover: #616161;
   --button-disabled-bg: #757575;
   --discard-marker-bg: rgba(255, 193, 7, 0.85);
@@ -25,207 +25,84 @@
   --dealer-chip-text: black;
   --menu-bg: #212121;
   --menu-text: #e0e0e0;
-  --menu-width: 250px; /* Ширина меню */
+  --menu-width: 250px;
 }
 
 /* Базовые стили */
-*, *::before, *::after {
-  box-sizing: border-box;
-}
-
+*, *::before, *::after { box-sizing: border-box; }
 body {
-  margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-  background-color: var(--poker-green);
-  color: var(--text-light);
-  min-height: 100vh;
-  overscroll-behavior: none;
-  -webkit-tap-highlight-color: transparent;
-  font-size: 16px;
+  margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: var(--poker-green); color: var(--text-light); min-height: 100vh;
+  overscroll-behavior: none; -webkit-tap-highlight-color: transparent; font-size: 16px;
 }
-
 #app {
-  display: flex;
-  flex-direction: column;
-  min-height: 100vh;
-  max-width: 600px;
-  margin: 0 auto;
-  padding: 5px;
-  box-sizing: border-box;
-  overflow: hidden;
-  position: relative; /* Для позиционирования меню и кнопок */
+  display: flex; flex-direction: column; min-height: 100vh; max-width: 600px;
+  margin: 0 auto; padding: 5px; box-sizing: border-box; overflow: hidden; position: relative;
 }
 
 /* Стили для карт и слотов */
 .card {
-  border-radius: 5px;
-  background-color: var(--card-bg);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-weight: bold;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-  user-select: none;
-  -webkit-user-select: none;
-  cursor: grab; /* Изменен курсор для D&D */
-  position: relative;
-  overflow: hidden;
-  aspect-ratio: 2.5 / 3.5;
-  min-width: 40px;
-  font-size: clamp(16px, 4vw, 22px);
+  border-radius: 5px; background-color: var(--card-bg); display: flex; justify-content: center;
+  align-items: center; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  user-select: none; -webkit-user-select: none; cursor: grab; position: relative; overflow: hidden;
+  aspect-ratio: 2.5 / 3.5; min-width: 40px; font-size: clamp(18px, 4.5vw, 24px); /* Увеличен шрифт */
   transition: transform 0.2s ease-out, box-shadow 0.2s ease-out, opacity 0.2s;
+  width: 100%; /* Карта занимает весь слот */
+  height: 100%; /* Карта занимает весь слот */
 }
-.card.dragging { /* Стиль для перетаскиваемой карты (оригинала) */
-    opacity: 0.4 !important; /* Важно, чтобы перекрыть другие стили */
-    cursor: grabbing;
-    /* transform: scale(1.05); */ /* Можно добавить увеличение */
-}
-
+.card.dragging { opacity: 0.4 !important; cursor: grabbing; }
 .card-slot {
-  border: 2px dashed var(--slot-border);
-  border-radius: 5px;
-  aspect-ratio: 2.5 / 3.5;
-  min-width: 40px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  transition: background-color 0.2s, border-color 0.2s;
-  width: 100%;
-  height: auto;
-  position: relative;
+  border: 2px dashed var(--slot-border); border-radius: 5px; aspect-ratio: 2.5 / 3.5;
+  min-width: 40px; display: flex; justify-content: center; align-items: center;
+  transition: background-color 0.2s, border-color 0.2s; width: 100%; height: auto; position: relative;
+  padding: 0; /* Убираем внутренний отступ слота */
 }
-.card-slot.drag-over { /* Стиль для слота, над которым карта */
-    background-color: var(--slot-bg-drag-over);
-    border-color: var(--slot-border-active);
-    border-style: solid;
-}
+.card-slot.drag-over { background-color: var(--slot-bg-drag-over); border-color: var(--slot-border-active); border-style: solid; }
 
 /* Стили для кнопок управления в App.vue */
 .app-button {
-    position: absolute;
-    top: 10px;
-    z-index: 1010; /* Выше остального */
-    background-color: rgba(0, 0, 0, 0.3);
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    display: inline-flex;
-    justify-content: center;
-    align-items: center;
-    cursor: pointer;
-    padding: 0;
+    position: absolute; top: 8px; z-index: 1010; background-color: rgba(0, 0, 0, 0.3);
+    color: white; border: none; border-radius: 50%; width: 36px; height: 36px; /* Уменьшены кнопки */
+    display: inline-flex; justify-content: center; align-items: center; cursor: pointer; padding: 0;
     box-shadow: 0 1px 3px rgba(0,0,0,0.3);
 }
-.app-button:hover {
-    background-color: rgba(0, 0, 0, 0.5);
-}
-.app-button .material-icons-outlined {
-    font-size: 24px;
-}
-
-.menu-button {
-    left: 10px;
-}
-
-.fullscreen-button {
-    right: 10px;
-}
+.app-button:hover { background-color: rgba(0, 0, 0, 0.5); }
+.app-button .material-icons-outlined { font-size: 22px; /* Уменьшен размер иконки */ }
+.menu-button { left: 8px; }
+.fullscreen-button { right: 8px; }
 
 /* Стили для меню */
-.menu-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: rgba(0, 0, 0, 0.5);
-    z-index: 1000;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    pointer-events: none;
-}
-.menu-overlay.open {
-    opacity: 1;
-    pointer-events: auto;
-}
-
+.menu-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0, 0, 0, 0.5); z-index: 1000; opacity: 0; transition: opacity 0.3s ease; pointer-events: none; }
+.menu-overlay.open { opacity: 1; pointer-events: auto; }
 .settings-menu {
-    position: fixed;
-    top: 0;
-    left: 0;
-    bottom: 0;
-    width: var(--menu-width);
-    max-width: 80%;
-    background-color: var(--menu-bg);
-    color: var(--menu-text);
-    padding: 20px;
-    box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
-    transform: translateX(-100%);
-    transition: transform 0.3s ease;
-    z-index: 1001;
-    display: flex;
-    flex-direction: column;
-    gap: 15px;
+    position: fixed; top: 0; left: 0; bottom: 0; width: var(--menu-width); max-width: 80%;
+    background-color: var(--menu-bg); color: var(--menu-text); padding: 20px; box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+    transform: translateX(-100%); transition: transform 0.3s ease; z-index: 1001; display: flex; flex-direction: column; gap: 15px;
 }
-.settings-menu.open {
-    transform: translateX(0);
-}
-.settings-menu h2 {
-    margin-top: 0;
-    margin-bottom: 10px;
-    text-align: center;
-    font-size: 1.4em;
-}
-.settings-menu .setting-group label {
-    display: block;
-    margin-bottom: 8px;
-    font-weight: bold;
-}
-.settings-menu .opponent-options {
-    display: flex;
-    gap: 15px;
-}
-.settings-menu .opponent-options label {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    cursor: pointer;
-    font-weight: normal;
-}
+.settings-menu.open { transform: translateX(0); }
+.settings-menu h2 { margin-top: 0; margin-bottom: 10px; text-align: center; font-size: 1.4em; }
+.settings-menu .setting-group label { display: block; margin-bottom: 8px; font-weight: bold; }
+.settings-menu .opponent-options { display: flex; gap: 15px; }
+.settings-menu .opponent-options label { display: flex; align-items: center; gap: 5px; cursor: pointer; font-weight: normal; }
 .settings-menu button.confirm-button {
-    padding: 10px 15px;
-    font-size: 1em;
-    background-color: var(--button-primary-bg);
-    color: white;
-    border: none;
-    border-radius: 5px;
-    cursor: pointer;
-    margin-top: auto; /* Прижать кнопку к низу */
-    transition: background-color 0.2s;
+    padding: 10px 15px; font-size: 1em; background-color: var(--button-primary-bg); color: white;
+    border: none; border-radius: 5px; cursor: pointer; margin-top: auto; transition: background-color 0.2s;
 }
-.settings-menu button.confirm-button:hover {
-    background-color: var(--button-primary-hover);
-}
+.settings-menu button.confirm-button:hover { background-color: var(--button-primary-hover); }
 
 /* Стили для кнопки "Начать игру" */
 .start-game-button {
-    padding: 15px 30px;
-    font-size: 1.2em;
-    font-weight: bold;
-    background-color: var(--button-primary-bg);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background-color 0.2s, transform 0.1s;
-    display: block;
-    margin: 20px auto; /* Центрирование */
+    padding: 12px 25px; /* Уменьшен размер */ font-size: 1.1em; font-weight: bold;
+    background-color: var(--button-primary-bg); color: white; border: none; border-radius: 8px;
+    cursor: pointer; transition: background-color 0.2s, transform 0.1s; display: block; margin: 15px auto; /* Уменьшен отступ */
 }
-.start-game-button:hover {
-    background-color: var(--button-primary-hover);
-}
-.start-game-button:active {
-    transform: scale(0.98);
-}
+.start-game-button:hover { background-color: var(--button-primary-hover); }
+.start-game-button:active { transform: scale(0.98); }
+
+/* Стили для уменьшения вертикальных отступов */
+#app { padding-bottom: 0; } /* Убираем нижний отступ у app */
+.game-container { gap: 5px; padding-top: 50px; } /* Уменьшаем gap и верхний отступ */
+.game-message { padding: 3px; font-size: 0.85em; min-height: 1.1em; }
+.player-area { min-height: auto; } /* Убираем min-height */
+.player-hand { padding: 5px; min-height: auto; } /* Уменьшаем padding и убираем min-height */
+.game-controls { padding: 5px 0; }
