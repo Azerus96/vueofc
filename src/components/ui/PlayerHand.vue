@@ -8,13 +8,13 @@ interface Props {
     draggedCardId: string | null;
 }
 defineProps<Props>();
-// Убрали touch события и tap
-const emit = defineEmits(['card-dragstart', 'card-dragend', 'zone-dragover', 'zone-dragleave', 'zone-drop']);
+const emit = defineEmits(['card-dragstart', 'card-dragend', 'card-touchstart', 'card-touchmove', 'card-touchend', 'zone-dragover', 'zone-dragleave', 'zone-drop']);
 
-// --- Обработчики для проброса событий ---
-const onDragStart = (event: DragEvent, card: Card) => emit('card-dragstart', event, card, 'hand'); // Явно указываем 'hand'
+const onDragStart = (event: DragEvent, card: Card) => emit('card-dragstart', event, card, 'hand');
 const onDragEnd = (event: DragEvent) => emit('card-dragend', event);
-// Убрали touch обработчики
+const onTouchStart = (event: TouchEvent, card: Card) => emit('card-touchstart', event, card);
+const onTouchMove = (event: TouchEvent) => emit('card-touchmove', event);
+const onTouchEnd = (event: TouchEvent) => emit('card-touchend', event);
 const onZoneDragOver = (event: DragEvent) => emit('zone-dragover', event);
 const onZoneDragLeave = (event: DragEvent) => emit('zone-dragleave', event);
 const onZoneDrop = (event: DragEvent) => emit('zone-drop', event);
@@ -35,8 +35,10 @@ const onZoneDrop = (event: DragEvent) => emit('zone-drop', event);
       :is-dragging="isDraggingActive && card.id === draggedCardId"
       @dragstart="(e: DragEvent) => onDragStart(e, card)"
       @dragend="onDragEnd"
-      <!-- Убрали touch слушатели и tap -->
-      />
+      @touchstart="(e: TouchEvent) => onTouchStart(e, card)"
+      @touchmove="onTouchMove"
+      @touchend="onTouchEnd"
+      ></CardComponent> <!-- ИСПРАВЛЕНО ЗДЕСЬ: Заменили /> на ></CardComponent> -->
   </div>
 </template>
 
