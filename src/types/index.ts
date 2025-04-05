@@ -6,7 +6,7 @@ export interface Card {
   id: string; // Уникальный ID для key в v-for и отслеживания
   rank: Rank;
   suit: Suit;
-  display: string; // Для удобства, например 'As'
+  display: string; // Для удобства, например 'A♠'
 }
 
 // Типы для доски игрока
@@ -18,14 +18,14 @@ export interface PlayerBoard {
 
 // Типы для оценки комбинаций
 export interface CombinationResult {
-    name: string; // e.g., "Flush", "Pair QQ"
+    name: string; // e.g., "Флеш", "Пара QQ"
     value: number; // Числовое значение для сравнения (включая кикеры)
     cards?: Card[]; // Карты, формирующие комбинацию (опционально)
 }
 
 export interface RoyaltyResult {
     points: number;
-    name: string; // e.g., "+4 Flush", "+9 AA"
+    name: string; // e.g., "+4 Флеш", "+9 AA"
 }
 
 export interface HandEvaluationResult extends CombinationResult {
@@ -61,7 +61,8 @@ export interface PlayerState {
 
 // Типы для фаз игры
 export type GamePhase =
-  | 'waiting'           // Ожидание игроков
+  | 'not_started'       // Игра еще не началась (до нажатия "Начать игру")
+  | 'waiting'           // Ожидание игроков (если нужно будет)
   | 'starting'          // Начало раунда
   | 'dealing_street_1'  // Раздача 1й улицы
   | 'placing_street_1'  // Расстановка 1й улицы
@@ -100,7 +101,7 @@ export interface GameState {
   dealerIndex: number;
   cardsOnHand: Card[]; // Карты, розданные текущему игроку
   selectedCardToDiscardIndex: number | null; // Индекс карты для сброса в cardsOnHand
-  selectedCardToPlaceIndex: number | null;   // Индекс карты для размещения в cardsOnHand
   showdownResults: ShowdownPairResult[] | null; // Результаты последнего вскрытия
-  message: string | null; // Сообщение для игрока (например, "Place 5 cards")
+  message: string | null; // Сообщение для игрока (на русском)
+  opponentCount: 1 | 2; // Количество оппонентов
 }
