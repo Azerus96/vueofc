@@ -1,89 +1,86 @@
 <script setup lang="ts">
-import type { Card } from '@/types';
-import CardComponent from '@/components/card/Card.vue';
+import type { Card, Suit } from '@/types';
 import { computed } from 'vue';
 
 interface Props {
   card: Card | null;
-  rowIndex: number;
-  slotIndex: number;
-  isFoul?: boolean;
+  isDragging?: boolean;
+  isDraggable?: boolean;
 }
-const props = defineProps<Props>();
-// Добавляем события для D&D карты *с доски*
-const emit = defineEmits(['dragover', 'dragleave', 'drop', 'card-dragstart', 'card-dragend']);
+const props = withDefaults(defineProps<Props>(), {
+    isDraggable: true,
+});
+const emit = defineEmits(['dragstart', 'dragend', 'touchstart', 'touchmove', 'touchend']);
 
-const slotClasses = computed(() => ({
-    'card-slot': true,
-    foul: props.isFoul
+const suitSymbol = computed(() => {
+  if (!props.card) return '';
+  const symbols: Record<Suit, string> = { s: '♠', h: '♥', d: '♦', c: '♣' };
+  return symbols[props.card.suit];
+});
+
+const cardDisplay = computed(() => {
+    if (!props.card) return '';
+    return `${props.card.rank}${suitSymbol.value}`;
+});
+
+const cardClasses = computed(() => ({
+    card: true,
+    dragging: props.isDragging,
+    'suit-red': props.card?.suit === 'h' || props.card?.suit === 'd',
+    'suit-black': props.card?.suit === 's' || props.card?.suit === 'c',
 }));
 
-const slotDataAttrs = computed(() => ({
-    'data-row-index': props.rowIndex,
-    'data-slot-index': props.slotIndex,
+const cardDataAttrs = computed(() => ({
+    'data-id': props.card?.id,
+    'data-suit': props.card?.suit,
+    'data-rank': props.card?.rank,
 }));
 
-// --- Обработчики D&D для слота ---
-const onDragOver = (event: DragEvent) => {
-    if (!props.card) { emit('dragover', event); }
-    else { event.preventDefault(); event.dataTransfer!.dropEffect = 'none'; }
+const onDragStart = (event: DragEvent) => {
+    if (props.card && props.isDraggable) emit('dragstart', event, props.card);
+    else event.preventDefault();
 };
-const onDragLeave = (event: DragEvent) => emit('dragleave', event);
-const onDrop = (event: DragEvent) => {
-    if (!props.card) { emit('drop', event, props.rowIndex, props.slotIndex); }
+const onDragEnd = (event: DragEvent) => emit('dragend', event);
+const onTouchStart = (event: TouchEvent) => {
+    if (props.card && props.isDraggable) emit('touchstart', event, props.card);
 };
-
-// --- Обработчики D&D для карты ВНУТРИ слота ---
-const onCardDragStart = (event: DragEvent, card: Card) => {
-    emit('card-dragstart', event, card, 'board'); // Передаем источник 'board'
-};
-const onCardDragEnd = (event: DragEvent) => {
-    emit('card-dragend', event);
-};
+const onTouchMove = (event: TouchEvent) => emit('touchmove', event);
+const onTouchEnd = (event: TouchEvent) => emit('touchend', event);
 
 </script>
 
 <template>
   <div
-    :class="slotClasses"
-    v-bind="slotDataAttrs"
-    @dragover.prevent="onDragOver"
-    @dragleave="onDragLeave"
-    @drop="onDrop"
+    v-if="card"
+    :class="cardClasses"
+    v-bind="cardDataAttrs"
+    :draggable="isDraggable"
+    @dragstart="onDragStart"
+    @dragend="onDragEnd"
+    @touchstart.passive="onTouchStart"
+    @touchmove.passive="onTouchMove"
+    @touchend.passive="onTouchEnd"
   >
-    <!-- Передаем обработчики D&D в CardComponent -->
-    <CardComponent
-        :card="card"
-        :is-draggable="!!card"
-        @dragstart="(e: DragEvent) => onCardDragStart(e, card!)"
-        @dragend="onCardDragEnd"
-    />
+    <!-- Цвет текста теперь всегда черный -->
+    <div class="card-content">{{ cardDisplay }}</div>
   </div>
+  <div v-else class="card-placeholder"></div>
 </template>
 
 <style scoped>
-.card-slot {
-  /* Стили из main.css */
-  padding: 0; /* Убедимся, что нет паддинга */
+.card {
+  cursor: grab; touch-action: none;
+  /* Цвет текста по умолчанию берется из .suit-red/.suit-black, но переопределяется ниже */
 }
-/* Класс drag-over применяется извне */
-.card-slot.drag-over {
-    background-color: var(--slot-bg-drag-over);
-    border-color: var(--slot-border-active);
-    border-style: solid;
+.card:not([draggable="true"]) { cursor: default; }
+.card.dragging { opacity: 0.4 !important; cursor: grabbing; }
+.card-content {
+    text-align: center; line-height: 1; pointer-events: none;
+    /* Явно задаем черный цвет для контента */
+    color: var(--card-black) !important;
 }
-.card-slot.foul {
-   border-color: var(--foul-border);
-}
-/* Стили для карты внутри слота (чтобы она занимала весь слот) */
-.card-slot :deep(.card) {
-    position: absolute; /* Позиционируем карту абсолютно внутри слота */
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-}
-.card-slot :deep(.card-placeholder) {
-     display: none; /* Скрываем плейсхолдер, если слот пуст */
+.card-placeholder {
+    width: 100%; height: 100%; aspect-ratio: 2.5 / 3.5;
+    border-radius: 5px; background-color: rgba(255, 255, 255, 0.05);
 }
 </style>
