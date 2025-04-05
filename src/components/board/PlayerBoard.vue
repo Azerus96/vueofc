@@ -7,7 +7,6 @@ interface Props {
   player: PlayerState;
 }
 defineProps<Props>();
-// Пробрасываем события D&D от рядов выше
 const emit = defineEmits(['slot-dragover', 'slot-dragleave', 'slot-drop', 'card-dragstart', 'card-dragend']);
 
 const gameStore = useGameStore();
@@ -16,11 +15,10 @@ const gameStore = useGameStore();
 const handleDragOver = (event: DragEvent) => emit('slot-dragover', event);
 const handleDragLeave = (event: DragEvent) => emit('slot-dragleave', event);
 const handleDrop = (event: DragEvent, rowIndex: number, slotIndex: number) => {
-    // Если rowIndex и slotIndex -1, значит drop был на саму доску (для возврата в руку)
     if (rowIndex === -1 && slotIndex === -1) {
-        emit('slot-drop', event, -1, -1); // Используем -1 как флаг для drop на доску/руку
+        emit('slot-drop', event, -1, -1);
     } else {
-        emit('slot-drop', event, rowIndex, slotIndex); // Drop на конкретный слот
+        emit('slot-drop', event, rowIndex, slotIndex);
     }
 };
 const handleCardDragStart = (event: DragEvent, card: Card, source: 'board') => emit('card-dragstart', event, card, source);
@@ -29,13 +27,12 @@ const handleCardDragEnd = (event: DragEvent) => emit('card-dragend', event);
 </script>
 
 <template>
-  <!-- Доска игрока теперь тоже может быть drop зоной (для возврата карт) -->
   <div
     class="player-board"
     :class="{ active: player.isActive && gameStore.isMyTurn, foul: player.isFoul }"
-    @dragover.prevent="handleDragOver" /* Обрабатываем dragover для доски */
-    @dragleave="handleDragLeave" /* Обрабатываем dragleave для доски */
-    @drop="handleDrop($event, -1, -1)" /* Обрабатываем drop для доски */
+    @dragover.prevent="handleDragOver"
+    @dragleave="handleDragLeave"
+    @drop="handleDrop($event, -1, -1)"
   >
     <div class="player-info">
       <span class="player-name">{{ player.name }}</span>
@@ -47,30 +44,53 @@ const handleCardDragEnd = (event: DragEvent) => emit('card-dragend', event);
       <span v-if="player.isDealer" class="dealer-chip">D</span>
     </div>
     <div class="board-rows">
+      <!-- Верхний ряд -->
       <CardRow
-        :row-cards="player.board.top" :row-index="0" :player-id="player.id"
-        :combination="player.combinations.top" :royalty="player.royalties.top"
-        @slot-dragover="handleDragOver" @slot-dragleave="handleDragLeave" @slot-drop="handleDrop"
-        @card-dragstart="handleCardDragStart" @card-dragend="handleCardDragEnd"
-      ></CardRow> <!-- Убедимся, что закрывающий тег есть -->
+        :row-cards="player.board.top"
+        :row-index="0"
+        :player-id="player.id"
+        :combination="player.combinations.top"
+        :royalty="player.royalties.top"
+        @slot-dragover="handleDragOver"
+        @slot-dragleave="handleDragLeave"
+        @slot-drop="handleDrop"
+        @card-dragstart="handleCardDragStart"
+        @card-dragend="handleCardDragEnd"
+      ></CardRow>
+
+      <!-- Средний ряд (строка ~36) -->
       <CardRow
-        :row-cards="player.board.middle" :row-index="1" :player-id="player.id"
-        :combination="player.combinations.middle" :royalty="player.royalties.middle"
-        @slot-dragover="handleDragOver" @slot-dragleave="handleDragLeave" @slot-drop="handleDrop"
-        @card-dragstart="handleCardDragStart" @card-dragend="handleCardDragEnd"
-       ></CardRow> <!-- Убедимся, что закрывающий тег есть -->
+        :row-cards="player.board.middle"
+        :row-index="1"
+        :player-id="player.id"
+        :combination="player.combinations.middle"
+        :royalty="player.royalties.middle"
+        @slot-dragover="handleDragOver"
+        @slot-dragleave="handleDragLeave"
+        @slot-drop="handleDrop"
+        @card-dragstart="handleCardDragStart"
+        @card-dragend="handleCardDragEnd"
+       ></CardRow>
+
+      <!-- Нижний ряд -->
       <CardRow
-        :row-cards="player.board.bottom" :row-index="2" :player-id="player.id"
-        :combination="player.combinations.bottom" :royalty="player.royalties.bottom"
-        @slot-dragover="handleDragOver" @slot-dragleave="handleDragLeave" @slot-drop="handleDrop"
-        @card-dragstart="handleCardDragStart" @card-dragend="handleCardDragEnd"
-      ></CardRow> <!-- Убедимся, что закрывающий тег есть -->
+        :row-cards="player.board.bottom"
+        :row-index="2"
+        :player-id="player.id"
+        :combination="player.combinations.bottom"
+        :royalty="player.royalties.bottom"
+        @slot-dragover="handleDragOver"
+        @slot-dragleave="handleDragLeave"
+        @slot-drop="handleDrop"
+        @card-dragstart="handleCardDragStart"
+        @card-dragend="handleCardDragEnd"
+      ></CardRow>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* Стили из предыдущего ответа */
+/* Стили не изменились */
 .player-board {
   border: 2px solid transparent; border-radius: 8px; padding: 8px 5px;
   background-color: var(--poker-green-darker); transition: border-color 0.3s;
