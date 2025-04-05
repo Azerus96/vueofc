@@ -15,7 +15,14 @@ const gameStore = useGameStore();
 // --- Обработчики для проброса событий D&D ---
 const handleDragOver = (event: DragEvent) => emit('slot-dragover', event);
 const handleDragLeave = (event: DragEvent) => emit('slot-dragleave', event);
-const handleDrop = (event: DragEvent, rowIndex: number, slotIndex: number) => emit('slot-drop', event, rowIndex, slotIndex);
+const handleDrop = (event: DragEvent, rowIndex: number, slotIndex: number) => {
+    // Если rowIndex и slotIndex -1, значит drop был на саму доску (для возврата в руку)
+    if (rowIndex === -1 && slotIndex === -1) {
+        emit('slot-drop', event, -1, -1); // Используем -1 как флаг для drop на доску/руку
+    } else {
+        emit('slot-drop', event, rowIndex, slotIndex); // Drop на конкретный слот
+    }
+};
 const handleCardDragStart = (event: DragEvent, card: Card, source: 'board') => emit('card-dragstart', event, card, source);
 const handleCardDragEnd = (event: DragEvent) => emit('card-dragend', event);
 
@@ -28,7 +35,7 @@ const handleCardDragEnd = (event: DragEvent) => emit('card-dragend', event);
     :class="{ active: player.isActive && gameStore.isMyTurn, foul: player.isFoul }"
     @dragover.prevent="handleDragOver" /* Обрабатываем dragover для доски */
     @dragleave="handleDragLeave" /* Обрабатываем dragleave для доски */
-    @drop="handleDrop($event, -1, -1)" /* Обрабатываем drop для доски (индексы не важны) */
+    @drop="handleDrop($event, -1, -1)" /* Обрабатываем drop для доски */
   >
     <div class="player-info">
       <span class="player-name">{{ player.name }}</span>
@@ -45,19 +52,19 @@ const handleCardDragEnd = (event: DragEvent) => emit('card-dragend', event);
         :combination="player.combinations.top" :royalty="player.royalties.top"
         @slot-dragover="handleDragOver" @slot-dragleave="handleDragLeave" @slot-drop="handleDrop"
         @card-dragstart="handleCardDragStart" @card-dragend="handleCardDragEnd"
-      />
+      ></CardRow> <!-- ИСПРАВЛЕНО ЗДЕСЬ -->
       <CardRow
         :row-cards="player.board.middle" :row-index="1" :player-id="player.id"
         :combination="player.combinations.middle" :royalty="player.royalties.middle"
         @slot-dragover="handleDragOver" @slot-dragleave="handleDragLeave" @slot-drop="handleDrop"
         @card-dragstart="handleCardDragStart" @card-dragend="handleCardDragEnd"
-       />
+       ></CardRow> <!-- ИСПРАВЛЕНО ЗДЕСЬ -->
       <CardRow
         :row-cards="player.board.bottom" :row-index="2" :player-id="player.id"
         :combination="player.combinations.bottom" :royalty="player.royalties.bottom"
         @slot-dragover="handleDragOver" @slot-dragleave="handleDragLeave" @slot-drop="handleDrop"
         @card-dragstart="handleCardDragStart" @card-dragend="handleCardDragEnd"
-      />
+      ></CardRow> <!-- ИСПРАВЛЕНО ЗДЕСЬ -->
     </div>
   </div>
 </template>
