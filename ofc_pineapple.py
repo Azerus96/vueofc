@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с ФИНАЛЬНЫМ ИСПРАВЛЕНИЕМ расчета очков (мертвые руки)
+# Версия с ФИНАЛЬНЫМ ИСПРАВЛЕНИЕМ v2 расчета очков (мертвые руки + логика 1-6)
 
 import pyspiel
 import numpy as np
@@ -286,7 +286,7 @@ class OFCPineappleState(pyspiel.State):
             if not is_dead[p1]: # P0 мертв, P1 жив
                 final_score_p0 = -6 + 0 # Роялти мертвой руки = 0
                 final_score_p1 = 6 + royalties[p1] # P1 получает свои роялти
-            # else: обе руки мертвы -> очки 0
+            # else: обе руки мертвы -> очки 0 (уже инициализированы)
         elif is_dead[p1]: # P1 мертв, P0 жив
             final_score_p0 = 6 + royalties[p0]
             final_score_p1 = -6 + 0
