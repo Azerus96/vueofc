@@ -1,14 +1,15 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с исправленным расчетом очков, улучшенными information_state_string и clone
+# Версия с ИСПРАВЛЕННЫМ расчетом очков 1-6 в _calculate_final_returns
 
 import pyspiel
 import numpy as np
 from typing import List, Tuple, Any, Dict, Optional
 import itertools
 from collections import Counter
-import copy # Импортируем для deepcopy в clone
+import copy
 
 # --- Константы ---
+# (Без изменений)
 NUM_PLAYERS = 2; NUM_RANKS = 13; NUM_SUITS = 4; NUM_CARDS = 52
 TOP_ROW_SIZE = 3; MIDDLE_ROW_SIZE = 5; BOTTOM_ROW_SIZE = 5
 TOTAL_CARDS_PLACED = TOP_ROW_SIZE + MIDDLE_ROW_SIZE + BOTTOM_ROW_SIZE
@@ -28,6 +29,7 @@ DISCARD_SLOT = -1
 RANKS = "23456789TJQKA"; SUITS = "shdc"
 
 # --- Функции для карт ---
+# (Без изменений)
 def card_rank(card_int: int) -> int:
     if card_int == -1: return -1;
     if card_int is None: raise TypeError("card_rank получила None вместо int")
@@ -55,6 +57,7 @@ def cards_to_strings(card_ints: List[int]) -> List[str]: return [card_to_string(
 def strings_to_cards(card_strs: List[str]) -> List[int]: return [string_to_card(s) for s in card_strs]
 
 # --- Оценка Комбинаций ---
+# (Без изменений)
 HIGH_CARD = 0; PAIR = 1; TWO_PAIR = 2; THREE_OF_A_KIND = 3; STRAIGHT = 4; FLUSH = 5; FULL_HOUSE = 6; FOUR_OF_A_KIND = 7; STRAIGHT_FLUSH = 8
 def evaluate_hand(card_ints: List[int]) -> Tuple[int, List[int]]:
     cards = [c for c in card_ints if c != -1 and c is not None]; n = len(cards)
@@ -82,6 +85,7 @@ def evaluate_hand(card_ints: List[int]) -> Tuple[int, List[int]]:
     return (HIGH_CARD, ranks)
 
 # --- Роялти и Мертвая Рука ---
+# (Без изменений)
 TOP_ROYALTIES_PAIR = { 4: 1, 5: 2, 6: 3, 7: 4, 8: 5, 9: 6, 10: 7, 11: 8, 12: 9 }
 TOP_ROYALTIES_SET = { r: 10 + r for r in range(NUM_RANKS) }
 MIDDLE_ROYALTIES = { THREE_OF_A_KIND: 2, STRAIGHT: 4, FLUSH: 8, FULL_HOUSE: 12, FOUR_OF_A_KIND: 20, STRAIGHT_FLUSH: 30 }
@@ -259,7 +263,11 @@ class OFCPineappleState(pyspiel.State):
         return str(action_tuple)
 
     def _calculate_final_returns(self):
-        if not all(count == TOTAL_CARDS_PLACED for count in self._total_cards_placed): return
+        # ИСПРАВЛЕНО: Проверяем полноту рук только перед финальным расчетом
+        if not all(count == TOTAL_CARDS_PLACED for count in self._total_cards_placed):
+             # print("Предупреждение: Попытка рассчитать очки до завершения руки.")
+             self._current_hand_returns = [0.0] * NUM_PLAYERS; return
+
         scores = [0] * NUM_PLAYERS; royalties = [0] * NUM_PLAYERS
         is_dead = [False] * NUM_PLAYERS; evals = [{}, {}, {}]
         for p in range(NUM_PLAYERS):
@@ -270,24 +278,35 @@ class OFCPineappleState(pyspiel.State):
                 royalties[p] += calculate_royalties(evals[p]['top'][0], evals[p]['top'][1], 'top')
                 royalties[p] += calculate_royalties(evals[p]['middle'][0], evals[p]['middle'][1], 'middle')
                 royalties[p] += calculate_royalties(evals[p]['bottom'][0], evals[p]['bottom'][1], 'bottom')
-        p0 = 0; p1 = 1; line_points = [0, 0]; scoop_points = [0, 0]
-        if is_dead[p0]:
-            if not is_dead[p1]: line_points[p1] = 3; scoop_points[p1] = 3
-        elif is_dead[p1]: line_points[p0] = 3; scoop_points[p0] = 3
-        else:
-            comp_t = compare_evals(evals[p0]['top'], evals[p1]['top']); comp_m = compare_evals(evals[p0]['middle'], evals[p1]['middle']); comp_b = compare_evals(evals[p0]['bottom'], evals[p1]['bottom'])
-            # ИСПРАВЛЕНО: Начисляем очки за линии правильно
-            line_points[p0] = (comp_t > 0) + (comp_m > 0) + (comp_b > 0)
-            line_points[p1] = (comp_t < 0) + (comp_m < 0) + (comp_b < 0)
-            # Проверяем скуп
-            if line_points[p0] == 3: scoop_points[p0] = 3
-            elif line_points[p1] == 3: scoop_points[p1] = 3
 
-        scores[p0] = line_points[p0] + scoop_points[p0] + (royalties[p0] if not is_dead[p0] else 0)
-        scores[p1] = line_points[p1] + scoop_points[p1] + (royalties[p1] if not is_dead[p1] else 0)
-        diff = scores[p0] - scores[p1]
-        self._current_hand_returns = [diff, -diff]; self._cumulative_returns[0] += diff; self._cumulative_returns[1] -= diff
-        # print(f"Рассчитаны очки: P0={scores[0]}, P1={scores[1]}, Royalty=[{royalties[0]},{royalties[1]}], Diff={diff}")
+        p0 = 0; p1 = 1;
+        # ИСПРАВЛЕНО: Логика расчета очков 1-6
+        line_scores = [0, 0] # Очки только за сравнение линий (+1/-1 за каждую)
+        scoop_bonus = [0, 0] # Дополнительные +3 за скуп
+
+        if is_dead[p0]:
+            if not is_dead[p1]: line_scores[p1] = 3; scoop_bonus[p1] = 3 # P1 выиграл все + скуп
+        elif is_dead[p1]: line_scores[p0] = 3; scoop_bonus[p0] = 3 # P0 выиграл все + скуп
+        else:
+            comp_t = compare_evals(evals[p0]['top'], evals[p1]['top'])
+            comp_m = compare_evals(evals[p0]['middle'], evals[p1]['middle'])
+            comp_b = compare_evals(evals[p0]['bottom'], evals[p1]['bottom'])
+            # Начисляем +1 за выигранную линию, -1 за проигранную
+            line_scores[p0] = comp_t + comp_m + comp_b
+            line_scores[p1] = -line_scores[p0] # Противоположный результат
+            # Проверяем скуп
+            if line_scores[p0] == 3: scoop_bonus[p0] = 3
+            elif line_scores[p1] == 3: scoop_bonus[p1] = 3
+
+        # Итоговый счет = очки за линии + очки за скуп + роялти
+        final_score_p0 = line_scores[p0] + scoop_bonus[p0] + (royalties[p0] if not is_dead[p0] else 0)
+        final_score_p1 = line_scores[p1] + scoop_bonus[p1] + (royalties[p1] if not is_dead[p1] else 0)
+
+        # Разница очков (P0 vs P1)
+        diff = final_score_p0 - final_score_p1
+        self._current_hand_returns = [diff, -diff]
+        self._cumulative_returns[0] += diff; self._cumulative_returns[1] -= diff
+        # print(f"Рассчитаны очки: P0={final_score_p0}, P1={final_score_p1}, Royalty=[{royalties[0]},{royalties[1]}], Diff={diff}")
 
     def _check_and_setup_fantasy(self) -> bool:
         # TODO: Реализовать
@@ -328,30 +347,19 @@ class OFCPineappleState(pyspiel.State):
         # ИСПРАВЛЕНО: Используем copy.deepcopy для всех изменяемых списков/словарей
         cloned = type(self)(self._game) # Создаем экземпляр того же класса
         # Копируем неизменяемые или простые типы
-        cloned._current_player = self._current_player
-        cloned._dealer_button = self._dealer_button
-        cloned._next_player_to_act = self._next_player_to_act
-        cloned._player_to_deal_to = self._player_to_deal_to
-        cloned._phase = self._phase
-        cloned._fantasy_cards_count = self._fantasy_cards_count
-        cloned._fantasy_player_has_placed = self._fantasy_player_has_placed
+        cloned._current_player = self._current_player; cloned._dealer_button = self._dealer_button
+        cloned._next_player_to_act = self._next_player_to_act; cloned._player_to_deal_to = self._player_to_deal_to; cloned._phase = self._phase
+        cloned._fantasy_cards_count = self._fantasy_cards_count; cloned._fantasy_player_has_placed = self._fantasy_player_has_placed
         cloned._game_over = self._game_over
         # Копируем списки верхнего уровня
-        cloned._deck = self._deck[:]
-        cloned._cards_to_place_count = self._cards_to_place_count[:]
-        cloned._cards_to_discard_count = self._cards_to_discard_count[:]
-        cloned._in_fantasy = self._in_fantasy[:]
-        cloned._can_enter_fantasy = self._can_enter_fantasy[:]
-        cloned._total_cards_placed = self._total_cards_placed[:]
-        cloned._cumulative_returns = self._cumulative_returns[:]
-        cloned._current_hand_returns = self._current_hand_returns[:]
+        cloned._deck = self._deck[:]; cloned._cards_to_place_count = self._cards_to_place_count[:]
+        cloned._cards_to_discard_count = self._cards_to_discard_count[:]; cloned._in_fantasy = self._in_fantasy[:]
+        cloned._can_enter_fantasy = self._can_enter_fantasy[:]; cloned._total_cards_placed = self._total_cards_placed[:]
+        cloned._cumulative_returns = self._cumulative_returns[:]; cloned._current_hand_returns = self._current_hand_returns[:]
         # Глубокое копирование вложенных списков/словарей
-        cloned._board = copy.deepcopy(self._board)
-        cloned._current_cards = copy.deepcopy(self._current_cards)
-        cloned._discards = copy.deepcopy(self._discards)
-        cloned._fantasy_trigger = copy.deepcopy(self._fantasy_trigger)
-        # Кэш не копируем
-        cloned._cached_legal_actions = None
+        cloned._board = copy.deepcopy(self._board); cloned._current_cards = copy.deepcopy(self._current_cards)
+        cloned._discards = copy.deepcopy(self._discards); cloned._fantasy_trigger = copy.deepcopy(self._fantasy_trigger)
+        cloned._cached_legal_actions = None # Кэш не копируем
         return cloned
 
     def resample_from_infostate(self, player_id, probability_sampler): return self.clone() # Placeholder
