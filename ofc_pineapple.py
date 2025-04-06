@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с ИСПРАВЛЕННЫМ расчетом очков 1-6 в _calculate_final_returns
+# Версия с ИСПРАВЛЕННЫМ расчетом очков 1-6 (проверка скупа)
 
 import pyspiel
 import numpy as np
@@ -294,9 +294,9 @@ class OFCPineappleState(pyspiel.State):
             # Начисляем +1 за выигранную линию, -1 за проигранную
             line_scores[p0] = comp_t + comp_m + comp_b
             line_scores[p1] = -line_scores[p0] # Противоположный результат
-            # Проверяем скуп
-            if line_scores[p0] == 3: scoop_bonus[p0] = 3
-            elif line_scores[p1] == 3: scoop_bonus[p1] = 3
+            # Проверяем скуп по результатам сравнения
+            if comp_t == 1 and comp_m == 1 and comp_b == 1: scoop_bonus[p0] = 3
+            elif comp_t == -1 and comp_m == -1 and comp_b == -1: scoop_bonus[p1] = 3
 
         # Итоговый счет = очки за линии + очки за скуп + роялти
         final_score_p0 = line_scores[p0] + scoop_bonus[p0] + (royalties[p0] if not is_dead[p0] else 0)
@@ -318,7 +318,6 @@ class OFCPineappleState(pyspiel.State):
 
     def information_state_string(self, player: int) -> str:
         """Возвращает строку информации, доступную игроку."""
-        # ИСПРАВЛЕНО: Улучшено форматирование и добавлены проверки
         if player < 0 or player >= self._num_players: return f"Phase:{self._phase};GameOver:{self._game_over}"
         parts = []; parts.append(f"P:{player}"); parts.append(f"Ph:{self._phase}")
         my_board_cards = self._board[player]
@@ -344,22 +343,17 @@ class OFCPineappleState(pyspiel.State):
 
     def clone(self):
         """Создает глубокую копию состояния."""
-        # ИСПРАВЛЕНО: Используем copy.deepcopy для всех изменяемых списков/словарей
-        cloned = type(self)(self._game) # Создаем экземпляр того же класса
-        # Копируем неизменяемые или простые типы
+        cloned = type(self)(self._game)
         cloned._current_player = self._current_player; cloned._dealer_button = self._dealer_button
         cloned._next_player_to_act = self._next_player_to_act; cloned._player_to_deal_to = self._player_to_deal_to; cloned._phase = self._phase
-        cloned._fantasy_cards_count = self._fantasy_cards_count; cloned._fantasy_player_has_placed = self._fantasy_player_has_placed
-        cloned._game_over = self._game_over
-        # Копируем списки верхнего уровня
         cloned._deck = self._deck[:]; cloned._cards_to_place_count = self._cards_to_place_count[:]
         cloned._cards_to_discard_count = self._cards_to_discard_count[:]; cloned._in_fantasy = self._in_fantasy[:]
-        cloned._can_enter_fantasy = self._can_enter_fantasy[:]; cloned._total_cards_placed = self._total_cards_placed[:]
-        cloned._cumulative_returns = self._cumulative_returns[:]; cloned._current_hand_returns = self._current_hand_returns[:]
-        # Глубокое копирование вложенных списков/словарей
+        cloned._can_enter_fantasy = self._can_enter_fantasy[:]; cloned._fantasy_cards_count = self._fantasy_cards_count; cloned._fantasy_player_has_placed = self._fantasy_player_has_placed
+        cloned._total_cards_placed = self._total_cards_placed[:]; cloned._game_over = self._game_over; cloned._cumulative_returns = self._cumulative_returns[:]
+        cloned._current_hand_returns = self._current_hand_returns[:]
         cloned._board = copy.deepcopy(self._board); cloned._current_cards = copy.deepcopy(self._current_cards)
         cloned._discards = copy.deepcopy(self._discards); cloned._fantasy_trigger = copy.deepcopy(self._fantasy_trigger)
-        cloned._cached_legal_actions = None # Кэш не копируем
+        cloned._cached_legal_actions = None
         return cloned
 
     def resample_from_infostate(self, player_id, probability_sampler): return self.clone() # Placeholder
