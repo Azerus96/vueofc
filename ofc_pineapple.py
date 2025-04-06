@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с исправлением action_to_string и полной логикой обычной игры (улицы 1-5)
+# Версия с вызовом расчета очков, улучшенным info_string и clone
 
 import pyspiel
 import numpy as np
@@ -8,6 +8,7 @@ import itertools
 from collections import Counter
 
 # --- Константы ---
+# (Без изменений)
 NUM_PLAYERS = 2; NUM_RANKS = 13; NUM_SUITS = 4; NUM_CARDS = 52
 TOP_ROW_SIZE = 3; MIDDLE_ROW_SIZE = 5; BOTTOM_ROW_SIZE = 5
 TOTAL_CARDS_PLACED = TOP_ROW_SIZE + MIDDLE_ROW_SIZE + BOTTOM_ROW_SIZE
@@ -27,6 +28,7 @@ DISCARD_SLOT = -1
 RANKS = "23456789TJQKA"; SUITS = "shdc"
 
 # --- Функции для карт ---
+# (Без изменений)
 def card_rank(card_int: int) -> int:
     if card_int == -1: return -1;
     if card_int is None: raise TypeError("card_rank получила None вместо int")
@@ -54,6 +56,7 @@ def cards_to_strings(card_ints: List[int]) -> List[str]: return [card_to_string(
 def strings_to_cards(card_strs: List[str]) -> List[int]: return [string_to_card(s) for s in card_strs]
 
 # --- Оценка Комбинаций ---
+# (Без изменений)
 HIGH_CARD = 0; PAIR = 1; TWO_PAIR = 2; THREE_OF_A_KIND = 3; STRAIGHT = 4; FLUSH = 5; FULL_HOUSE = 6; FOUR_OF_A_KIND = 7; STRAIGHT_FLUSH = 8
 def evaluate_hand(card_ints: List[int]) -> Tuple[int, List[int]]:
     cards = [c for c in card_ints if c != -1 and c is not None]; n = len(cards)
@@ -81,6 +84,7 @@ def evaluate_hand(card_ints: List[int]) -> Tuple[int, List[int]]:
     return (HIGH_CARD, ranks)
 
 # --- Роялти и Мертвая Рука ---
+# (Без изменений)
 TOP_ROYALTIES_PAIR = { 4: 1, 5: 2, 6: 3, 7: 4, 8: 5, 9: 6, 10: 7, 11: 8, 12: 9 }
 TOP_ROYALTIES_SET = { r: 10 + r for r in range(NUM_RANKS) }
 MIDDLE_ROYALTIES = { THREE_OF_A_KIND: 2, STRAIGHT: 4, FLUSH: 8, FULL_HOUSE: 12, FOUR_OF_A_KIND: 20, STRAIGHT_FLUSH: 30 }
@@ -159,11 +163,22 @@ class OFCPineappleState(pyspiel.State):
             elif current_phase % 4 == 3: next_phase = current_phase + 1; self._current_player = self._player_to_deal_to; self._cards_to_place_count[self._current_player] = 2; self._cards_to_discard_count[self._current_player] = 1
             elif current_phase % 4 == 0:
                 if current_phase == STREET_FIFTH_PLACE_P2:
-                    next_phase = STREET_REGULAR_SHOWDOWN; self._current_player = pyspiel.PlayerId.TERMINAL; self._calculate_final_returns()
+                    next_phase = STREET_REGULAR_SHOWDOWN; self._current_player = pyspiel.PlayerId.TERMINAL;
+                    # ИСПРАВЛЕНО: Вызываем расчет очков здесь
+                    self._calculate_final_returns()
+                    # TODO: Проверить Fantasy
                     if not self._check_and_setup_fantasy(): self._game_over = True
                 else: next_phase = current_phase + 1; self._current_player = pyspiel.PlayerId.CHANCE; self._player_to_deal_to = self._next_player_to_act
+        # ИСПРАВЛЕНО: Обработка шоудауна - если игра не закончилась (из-за Fantasy), не ставим TERMINAL
+        elif current_phase == STREET_REGULAR_SHOWDOWN:
+             if not self._game_over: # Если игра продолжается в Fantasy
+                  # TODO: Установить фазу PHASE_FANTASY_DEAL и нужного игрока
+                  print("Переход в Fantasy (пока не реализован)")
+                  self._game_over = True # Временно завершаем
+                  self._current_player = pyspiel.PlayerId.TERMINAL
+             next_phase = current_phase # Остаемся в этой фазе или TERMINAL
+        # TODO: Добавить логику переходов для Fantasy
         else:
-             if current_phase != STREET_REGULAR_SHOWDOWN: print(f"Предупреждение: Необработанный переход из фазы {current_phase}")
              if not self._game_over: self._game_over = True; self._current_player = pyspiel.PlayerId.TERMINAL
              next_phase = current_phase
         self._phase = next_phase
@@ -245,21 +260,22 @@ class OFCPineappleState(pyspiel.State):
         try:
             if isinstance(action_tuple, tuple):
                  if len(action_tuple) > 0 and isinstance(action_tuple[0], tuple) and len(action_tuple[0]) == 2: # Улицы 2-5 или Fantasy F
-                     # Различаем по количеству пар в placement
                      placement_tuple = action_tuple[0]
                      discard_card = action_tuple[1]
                      placement_str = " ".join([f"{card_to_string(c)}({s})" for c,s in placement_tuple])
                      discard_str = card_to_string(discard_card)
-                     if len(placement_tuple) == 2: # Улицы 2-5
-                         return f"Place2 {placement_str} Discard {discard_str}"
-                     # TODO: Добавить формат для Fantasy F (13 пар)
+                     if len(placement_tuple) == 2: return f"Place2 {placement_str} Discard {discard_str}"
                  elif len(action_tuple) == 5 and isinstance(action_tuple[0], tuple): # Улица 1
                      return "Place1 " + " ".join([f"{card_to_string(c)}({s})" for c,s in action_tuple])
         except Exception as e: print(f"Ошибка форматирования действия {action_tuple}: {e}"); return str(action_tuple)
         return str(action_tuple)
 
     def _calculate_final_returns(self):
-        if not all(count == TOTAL_CARDS_PLACED for count in self._total_cards_placed): return
+        # Проверяем полноту рук только перед финальным расчетом
+        if not all(count == TOTAL_CARDS_PLACED for count in self._total_cards_placed):
+             print("Предупреждение: Попытка рассчитать очки до завершения руки.")
+             self._current_hand_returns = [0.0] * NUM_PLAYERS; return
+
         scores = [0] * NUM_PLAYERS; royalties = [0] * NUM_PLAYERS
         is_dead = [False] * NUM_PLAYERS; evals = [{}, {}, {}]
         for p in range(NUM_PLAYERS):
@@ -284,6 +300,7 @@ class OFCPineappleState(pyspiel.State):
         if not is_dead[p1]: scores[p1] += royalties[p1]
         diff = scores[0] - scores[1]
         self._current_hand_returns = [diff, -diff]; self._cumulative_returns[0] += diff; self._cumulative_returns[1] -= diff
+        print(f"Рассчитаны очки: P0={scores[0]}, P1={scores[1]}, Royalty=[{royalties[0]},{royalties[1]}], Diff={diff}") # Отладочный вывод
 
     def _check_and_setup_fantasy(self) -> bool:
         """Проверяет условия входа в Fantasy и настраивает состояние."""
@@ -295,26 +312,40 @@ class OFCPineappleState(pyspiel.State):
         return self._cumulative_returns
 
     def information_state_string(self, player):
-        parts = []; parts.append(f"P:{player}"); parts.append(f"Phase:{self._phase}")
-        parts.append(f"Board:[{' '.join(cards_to_strings(self._board[player]))}]")
-        parts.append(f"Hand:[{' '.join(cards_to_strings(self._current_cards[player]))}]")
-        parts.append(f"Discard:[{' '.join(cards_to_strings(self._discards[player]))}]")
-        opponent = 1 - player; opponent_board_str = f"OppBoard:[{' '.join(cards_to_strings(self._board[opponent]))}]"
+        """Возвращает строку информации, доступную игроку."""
+        # ИСПРАВЛЕНО: Улучшено форматирование и добавлены разделители
+        parts = []
+        parts.append(f"P{player}")
+        parts.append(f"Ph:{self._phase}")
+        # Форматируем доску с разделителями
+        my_board_str = f"B:[{' '.join(cards_to_strings(self._board[player][:3]))}|{' '.join(cards_to_strings(self._board[player][3:8]))}|{' '.join(cards_to_strings(self._board[player][8:]))}]"
+        parts.append(my_board_str)
+        parts.append(f"H:[{' '.join(cards_to_strings(self._current_cards[player]))}]")
+        parts.append(f"D:[{' '.join(cards_to_strings(self._discards[player]))}]")
+
+        opponent = 1 - player
+        opp_board_str = f"OB:[{' '.join(cards_to_strings(self._board[opponent][:3]))}|{' '.join(cards_to_strings(self._board[opponent][3:8]))}|{' '.join(cards_to_strings(self._board[opponent][8:]))}]"
         is_fantasy_phase = self._phase >= PHASE_FANTASY_DEAL and self._phase <= PHASE_FANTASY_SHOWDOWN
         show_opp_board = not is_fantasy_phase
-        if show_opp_board: parts.append(opponent_board_str)
-        else: parts.append("OppBoard:[HIDDEN]")
+        if show_opp_board: parts.append(opp_board_str)
+        else: parts.append("OB:[HIDDEN]")
+
+        # Показываем руку оппонента только на 1й улице
         if self._phase >= STREET_FIRST_DEAL_P1 and self._phase <= STREET_FIRST_PLACE_P2:
-             opponent_hand_str = f"OppHand:[{' '.join(cards_to_strings(self._current_cards[opponent]))}]"
+             opponent_hand_str = f"OH:[{' '.join(cards_to_strings(self._current_cards[opponent]))}]"
              parts.append(opponent_hand_str)
-        parts.append(f"Fantasy:[{int(self._in_fantasy[0])}{int(self._in_fantasy[1])}]")
-        try: parts.append(f"Place:{self._cards_to_place_count[player]}"); parts.append(f"Discard:{self._cards_to_discard_count[player]}")
-        except IndexError: parts.append("Place:?"); parts.append("Discard:?")
-        return " ".join(parts)
+
+        parts.append(f"F:[{int(self._in_fantasy[0])}{int(self._in_fantasy[1])}]")
+        # Используем try-except на случай, если player < 0
+        try: parts.append(f"NeedP:{self._cards_to_place_count[player]}|NeedD:{self._cards_to_discard_count[player]}")
+        except IndexError: parts.append("NeedP:?|NeedD:?")
+        return ";".join(parts) # Используем ';' как разделитель
 
     def observation_string(self, player): return self.information_state_string(player)
     def clone(self):
-        cloned = OFCPineappleState(self._game); cloned._current_player = self._current_player; cloned._dealer_button = self._dealer_button
+        # ИСПРАВЛЕНО: Используем super().__init__(game) и копируем атрибуты
+        cloned = type(self)(self._game) # Создаем экземпляр того же класса
+        cloned._current_player = self._current_player; cloned._dealer_button = self._dealer_button
         cloned._next_player_to_act = self._next_player_to_act; cloned._player_to_deal_to = self._player_to_deal_to; cloned._phase = self._phase
         cloned._deck = self._deck[:]; cloned._board = [row[:] for row in self._board]; cloned._current_cards = [cards[:] for cards in self._current_cards]
         cloned._discards = [cards[:] for cards in self._discards]; cloned._cards_to_place_count = self._cards_to_place_count[:]
