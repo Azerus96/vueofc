@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с ФИНАЛЬНЫМ ИСПРАВЛЕНИЕМ v2 расчета очков (мертвые руки + логика 1-6)
+# Версия с ОТЛАДКОЙ расчета очков
 
 import pyspiel
 import numpy as np
@@ -263,7 +263,11 @@ class OFCPineappleState(pyspiel.State):
         return str(action_tuple)
 
     def _calculate_final_returns(self):
-        if not all(count == TOTAL_CARDS_PLACED for count in self._total_cards_placed): return
+        # ИСПРАВЛЕНО v3: Проверяем полноту рук только перед финальным расчетом
+        if not all(count == TOTAL_CARDS_PLACED for count in self._total_cards_placed):
+             # print("Предупреждение: Попытка рассчитать очки до завершения руки.")
+             self._current_hand_returns = [0.0] * NUM_PLAYERS; return
+
         scores = [0] * NUM_PLAYERS; royalties = [0] * NUM_PLAYERS
         is_dead = [False] * NUM_PLAYERS; evals = [{}, {}, {}]
         for p in range(NUM_PLAYERS):
@@ -276,21 +280,25 @@ class OFCPineappleState(pyspiel.State):
                 royalties[p] += calculate_royalties(evals[p]['bottom'][0], evals[p]['bottom'][1], 'bottom')
 
         p0 = 0; p1 = 1;
-        # ИСПРАВЛЕНО: Логика расчета очков 1-6
-        line_scores = [0, 0] # Очки только за сравнение линий (+1/-1 за каждую)
+        # ИСПРАВЛЕНО v3: Логика расчета очков 1-6
+        line_points = [0, 0] # Очки только за сравнение линий (+1/-1 за каждую)
         scoop_bonus = [0, 0] # Дополнительные +3 за скуп
         final_score_p0 = 0
         final_score_p1 = 0
 
-        if is_dead[p0]:
-            if not is_dead[p1]: # P0 мертв, P1 жив
-                final_score_p0 = -6 + 0 # Роялти мертвой руки = 0
-                final_score_p1 = 6 + royalties[p1] # P1 получает свои роялти
-            # else: обе руки мертвы -> очки 0 (уже инициализированы)
-        elif is_dead[p1]: # P1 мертв, P0 жив
+        if is_dead[p0] and is_dead[p1]:
+            # Обе руки мертвы - счет 0
+            pass # final_score_p0 и final_score_p1 остаются 0
+        elif is_dead[p0]:
+            # P0 мертв, P1 жив -> P1 получает +6 очков (3 линии + 3 скуп) + свои роялти
+            final_score_p0 = -6 # P0 проигрывает 6 очков, роялти 0
+            final_score_p1 = 6 + royalties[p1]
+        elif is_dead[p1]:
+            # P1 мертв, P0 жив -> P0 получает +6 очков + свои роялти
             final_score_p0 = 6 + royalties[p0]
-            final_score_p1 = -6 + 0
-        else: # Обе руки живы
+            final_score_p1 = -6 # P1 проигрывает 6 очков, роялти 0
+        else:
+            # Обе руки живы
             comp_t = compare_evals(evals[p0]['top'], evals[p1]['top'])
             comp_m = compare_evals(evals[p0]['middle'], evals[p1]['middle'])
             comp_b = compare_evals(evals[p0]['bottom'], evals[p1]['bottom'])
