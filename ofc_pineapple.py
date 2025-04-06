@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с ИСПРАВЛЕННЫМ расчетом очков 1-6 (проверка скупа)
+# Версия с ФИНАЛЬНЫМ ИСПРАВЛЕНИЕМ расчета очков (мертвые руки)
 
 import pyspiel
 import numpy as np
@@ -263,11 +263,7 @@ class OFCPineappleState(pyspiel.State):
         return str(action_tuple)
 
     def _calculate_final_returns(self):
-        # ИСПРАВЛЕНО: Проверяем полноту рук только перед финальным расчетом
-        if not all(count == TOTAL_CARDS_PLACED for count in self._total_cards_placed):
-             # print("Предупреждение: Попытка рассчитать очки до завершения руки.")
-             self._current_hand_returns = [0.0] * NUM_PLAYERS; return
-
+        if not all(count == TOTAL_CARDS_PLACED for count in self._total_cards_placed): return
         scores = [0] * NUM_PLAYERS; royalties = [0] * NUM_PLAYERS
         is_dead = [False] * NUM_PLAYERS; evals = [{}, {}, {}]
         for p in range(NUM_PLAYERS):
@@ -283,24 +279,30 @@ class OFCPineappleState(pyspiel.State):
         # ИСПРАВЛЕНО: Логика расчета очков 1-6
         line_scores = [0, 0] # Очки только за сравнение линий (+1/-1 за каждую)
         scoop_bonus = [0, 0] # Дополнительные +3 за скуп
+        final_score_p0 = 0
+        final_score_p1 = 0
 
         if is_dead[p0]:
-            if not is_dead[p1]: line_scores[p1] = 3; scoop_bonus[p1] = 3 # P1 выиграл все + скуп
-        elif is_dead[p1]: line_scores[p0] = 3; scoop_bonus[p0] = 3 # P0 выиграл все + скуп
-        else:
+            if not is_dead[p1]: # P0 мертв, P1 жив
+                final_score_p0 = -6 + 0 # Роялти мертвой руки = 0
+                final_score_p1 = 6 + royalties[p1] # P1 получает свои роялти
+            # else: обе руки мертвы -> очки 0
+        elif is_dead[p1]: # P1 мертв, P0 жив
+            final_score_p0 = 6 + royalties[p0]
+            final_score_p1 = -6 + 0
+        else: # Обе руки живы
             comp_t = compare_evals(evals[p0]['top'], evals[p1]['top'])
             comp_m = compare_evals(evals[p0]['middle'], evals[p1]['middle'])
             comp_b = compare_evals(evals[p0]['bottom'], evals[p1]['bottom'])
-            # Начисляем +1 за выигранную линию, -1 за проигранную
+            # Начисляем очки за линии +1/-1
             line_scores[p0] = comp_t + comp_m + comp_b
-            line_scores[p1] = -line_scores[p0] # Противоположный результат
+            line_scores[p1] = -line_scores[p0]
             # Проверяем скуп по результатам сравнения
             if comp_t == 1 and comp_m == 1 and comp_b == 1: scoop_bonus[p0] = 3
             elif comp_t == -1 and comp_m == -1 and comp_b == -1: scoop_bonus[p1] = 3
-
-        # Итоговый счет = очки за линии + очки за скуп + роялти
-        final_score_p0 = line_scores[p0] + scoop_bonus[p0] + (royalties[p0] if not is_dead[p0] else 0)
-        final_score_p1 = line_scores[p1] + scoop_bonus[p1] + (royalties[p1] if not is_dead[p1] else 0)
+            # Итоговый счет = очки за линии + очки за скуп + роялти
+            final_score_p0 = line_scores[p0] + scoop_bonus[p0] + royalties[p0]
+            final_score_p1 = line_scores[p1] + scoop_bonus[p1] + royalties[p1]
 
         # Разница очков (P0 vs P1)
         diff = final_score_p0 - final_score_p1
@@ -317,7 +319,6 @@ class OFCPineappleState(pyspiel.State):
         return self._cumulative_returns
 
     def information_state_string(self, player: int) -> str:
-        """Возвращает строку информации, доступную игроку."""
         if player < 0 or player >= self._num_players: return f"Phase:{self._phase};GameOver:{self._game_over}"
         parts = []; parts.append(f"P:{player}"); parts.append(f"Ph:{self._phase}")
         my_board_cards = self._board[player]
@@ -342,7 +343,6 @@ class OFCPineappleState(pyspiel.State):
     def observation_string(self, player): return self.information_state_string(player)
 
     def clone(self):
-        """Создает глубокую копию состояния."""
         cloned = type(self)(self._game)
         cloned._current_player = self._current_player; cloned._dealer_button = self._dealer_button
         cloned._next_player_to_act = self._next_player_to_act; cloned._player_to_deal_to = self._player_to_deal_to; cloned._phase = self._phase
