@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с resample_from_infostate, исправленным action_to_string и отладкой очков
+# Версия с resample_from_infostate, исправленным action_to_string и отладкой очков (v2 - исправлен IndentationError)
 
 import pyspiel
 import numpy as np
@@ -200,9 +200,18 @@ class OFCPineappleState(pyspiel.State):
                 current_player_index = (current_phase - STREET_FIRST_PLACE_P1) // 2 % NUM_PLAYERS; is_p1_phase = current_player_index == 0; is_p2_phase = not is_p1_phase
                 if is_p1_phase: next_phase = current_phase + 1; self._current_player = pyspiel.PlayerId.CHANCE; self._player_to_deal_to = (self._next_player_to_act + 1) % self._num_players
                 elif is_p2_phase:
-                    if current_phase == STREET_FIFTH_PLACE_P2: next_phase = STREET_REGULAR_SHOWDOWN; self._current_player = pyspiel.PlayerId.TERMINAL; self._calculate_final_returns();
-                        if not self._check_and_setup_fantasy(): self._game_over = True
-                    else: next_phase = current_phase + 1; self._current_player = pyspiel.PlayerId.CHANCE; self._player_to_deal_to = self._next_player_to_act
+                    if current_phase == STREET_FIFTH_PLACE_P2:
+                        next_phase = STREET_REGULAR_SHOWDOWN
+                        self._current_player = pyspiel.PlayerId.TERMINAL
+                        self._calculate_final_returns()
+                        # Проверяем Fantasy (пока заглушка)
+                        # ИСПРАВЛЕН ОТСТУП ЗДЕСЬ:
+                        if not self._check_and_setup_fantasy():
+                            self._game_over = True
+                    else:
+                        next_phase = current_phase + 1
+                        self._current_player = pyspiel.PlayerId.CHANCE
+                        self._player_to_deal_to = self._next_player_to_act
         elif current_phase == STREET_REGULAR_SHOWDOWN:
              if not self._game_over: print("Переход в Fantasy (пока не реализован)"); self._game_over = True; self._current_player = pyspiel.PlayerId.TERMINAL
              next_phase = current_phase
@@ -381,18 +390,13 @@ class OFCPineappleState(pyspiel.State):
 
         # 1. Определить известные карты
         known_cards: Set[int] = set()
-        # Доска player_id
         known_cards.update(c for c in self._board[player_id] if c != -1)
-        # Рука player_id (если есть)
         known_cards.update(c for c in self._current_cards[player_id] if c != -1)
-        # Сброс player_id
         known_cards.update(c for c in self._discards[player_id] if c != -1)
-        # Доска оппонента
         known_cards.update(c for c in self._board[opponent_id] if c != -1)
-        # Карты в руке оппонента на улице 1 (если применимо)
-        if self._phase == STREET_FIRST_DEAL_P2 and player_id == 0: # P0 видит руку P1
+        if self._phase == STREET_FIRST_DEAL_P2 and player_id == 0:
              known_cards.update(c for c in self._current_cards[opponent_id] if c != -1)
-        elif self._phase == STREET_FIRST_PLACE_P1 and player_id == 1: # P1 видит руку P0
+        elif self._phase == STREET_FIRST_PLACE_P1 and player_id == 1:
              known_cards.update(c for c in self._current_cards[opponent_id] if c != -1)
 
         # 2. Определить неизвестные карты
@@ -402,7 +406,7 @@ class OFCPineappleState(pyspiel.State):
 
         # 3. Перемешать неизвестные карты
         np.random.shuffle(unknown_cards_list)
-        unknown_cards_iter = iter(unknown_cards_list) # Используем итератор
+        unknown_cards_iter = iter(unknown_cards_list)
 
         # 4. Создать клон состояния
         cloned_state = self.clone()
@@ -414,26 +418,34 @@ class OFCPineappleState(pyspiel.State):
 
         # Определяем, должен ли оппонент иметь карты в руке СЕЙЧАС
         # (т.е. в фазе DEAL_Opponent или PLACE_Opponent на улицах 2-5)
+        # Важно: _current_cards оппонента в оригинальном состоянии могут быть пустыми,
+        # но если фаза подразумевает, что у него ДОЛЖНЫ быть карты, мы их сэмплируем.
         if opponent_id == 1: # Оппонент - P2
             if current_phase in [STREET_SECOND_DEAL_P2, STREET_SECOND_PLACE_P2,
                                  STREET_THIRD_DEAL_P2, STREET_THIRD_PLACE_P2,
                                  STREET_FOURTH_DEAL_P2, STREET_FOURTH_PLACE_P2,
                                  STREET_FIFTH_DEAL_P2, STREET_FIFTH_PLACE_P2]:
-                opponent_hand_size_needed = 3
+                # Если это фаза PLACE оппонента, у него уже нет карт в руке.
+                # Карты нужны только если это фаза DEAL оппонента.
+                if current_phase % 2 != 0: # DEAL phase
+                    opponent_hand_size_needed = 3
         else: # Оппонент - P1
             if current_phase in [STREET_SECOND_DEAL_P1, STREET_SECOND_PLACE_P1,
                                  STREET_THIRD_DEAL_P1, STREET_THIRD_PLACE_P1,
                                  STREET_FOURTH_DEAL_P1, STREET_FOURTH_PLACE_P1,
                                  STREET_FIFTH_DEAL_P1, STREET_FIFTH_PLACE_P1]:
-                opponent_hand_size_needed = 3
+                if current_phase % 2 != 0: # DEAL phase
+                    opponent_hand_size_needed = 3
 
         # Определяем, сколько карт оппонент УЖЕ ДОЛЖЕН БЫЛ сбросить
+        # (по одной за каждую ЗАВЕРШЕННУЮ улицу, начиная со второй)
         if opponent_id == 1: # Оппонент - P2
             if current_phase > STREET_SECOND_PLACE_P2: opponent_discard_count_needed += 1
             if current_phase > STREET_THIRD_PLACE_P2: opponent_discard_count_needed += 1
             if current_phase > STREET_FOURTH_PLACE_P2: opponent_discard_count_needed += 1
             if current_phase > STREET_FIFTH_PLACE_P2: opponent_discard_count_needed += 1
         else: # Оппонент - P1
+            # P1 сбрасывает после фаз PLACE_P1 (2, 6, 10, 14, 18)
             if current_phase > STREET_SECOND_PLACE_P1: opponent_discard_count_needed += 1
             if current_phase > STREET_THIRD_PLACE_P1: opponent_discard_count_needed += 1
             if current_phase > STREET_FOURTH_PLACE_P1: opponent_discard_count_needed += 1
@@ -441,15 +453,15 @@ class OFCPineappleState(pyspiel.State):
 
         # 6. Заполнить неизвестное в клоне
         try:
-            # Рука оппонента
+            # Рука оппонента (если нужна)
             cloned_state._current_cards[opponent_id] = [next(unknown_cards_iter) for _ in range(opponent_hand_size_needed)]
-            # Сброс оппонента
-            cloned_state._discards[opponent_id] = [next(unknown_cards_iter) for _ in range(opponent_discard_count_needed)]
+            # Сброс оппонента (заполняем недостающие)
+            # Важно: мы не знаем, какие карты он сбросил, поэтому просто берем из пула
+            num_discards_to_sample = opponent_discard_count_needed - len(cloned_state._discards[opponent_id]) # На случай, если клон уже что-то содержит (не должен)
+            cloned_state._discards[opponent_id].extend([next(unknown_cards_iter) for _ in range(num_discards_to_sample)])
             # Колода
             cloned_state._deck = list(unknown_cards_iter) # Оставшиеся карты
         except StopIteration:
-            # Эта ошибка может возникнуть, если пул неизвестных карт исчерпан раньше времени
-            # (например, из-за ошибки в подсчете известных/неизвестных карт)
             raise Exception(f"Ошибка в resample_from_infostate: Не хватило неизвестных карт. "
                             f"Фаза: {current_phase}, Игрок: {player_id}, "
                             f"Известно: {len(known_cards)}, Неизвестно: {len(unknown_cards_set)}, "
@@ -467,7 +479,7 @@ class OFCPineappleState(pyspiel.State):
 # --- Регистрация игры ---
 try:
     pyspiel.load_game(_GAME_TYPE.short_name)
-    # print(f"Игра '{_GAME_TYPE.short_name}' уже была зарегистрирована.") # Можно закомментировать для чистоты логов
+    # print(f"Игра '{_GAME_TYPE.short_name}' уже была зарегистрирована.")
 except pyspiel.SpielError:
     pyspiel.register_game(_GAME_TYPE, OFCPineappleGame)
     print(f"Игра '{_GAME_TYPE.short_name}' успешно зарегистрирована.")
