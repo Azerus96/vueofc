@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с ИСПРАВЛЕННЫМ завершением игры (v13 - возврат к логике v11), chance_outcomes, resample_from_infostate, action_to_string и clone
+# Версия с ИСПРАВЛЕННЫМ завершением игры (v14), chance_outcomes, resample_from_infostate, action_to_string и clone
 
 import pyspiel
 import numpy as np
@@ -33,7 +33,7 @@ STREET_FOURTH_DEAL_P1 = 13; STREET_FOURTH_PLACE_P1 = 14
 STREET_FOURTH_DEAL_P2 = 15; STREET_FOURTH_PLACE_P2 = 16
 STREET_FIFTH_DEAL_P1 = 17; STREET_FIFTH_PLACE_P1 = 18
 STREET_FIFTH_DEAL_P2 = 19; STREET_FIFTH_PLACE_P2 = 20
-STREET_REGULAR_SHOWDOWN = 21
+STREET_REGULAR_SHOWDOWN = 21 # Фаза после подсчета очков (терминальная или переход к Fantasy)
 # Фазы Fantasyland (пока не используются активно в переходах)
 PHASE_FANTASY_SETUP = 30; PHASE_FANTASY_N_DEAL_1 = 31; PHASE_FANTASY_N_PLACE_1 = 32
 PHASE_FANTASY_N_DEAL_2 = 33; PHASE_FANTASY_N_PLACE_2 = 34; PHASE_FANTASY_N_DEAL_3 = 35; PHASE_FANTASY_N_PLACE_3 = 36
@@ -147,7 +147,7 @@ class OFCPineappleGame(pyspiel.Game):
     def make_py_observer(self, iig_obs_type=None, params=None): return None
 
 class OFCPineappleState(pyspiel.State):
-    # ... (__init__ без изменений, но с новыми переменными Fantasyland) ...
+    # ... (__init__ без изменений) ...
     def __init__(self, game):
         super().__init__(game)
         self._num_players = game.num_players(); self._dealer_button = 0
@@ -160,18 +160,14 @@ class OFCPineappleState(pyspiel.State):
         self._total_cards_placed = [0] * NUM_PLAYERS; self._game_over = False
         self._cumulative_returns = [0.0] * NUM_PLAYERS; self._current_hand_returns = [0.0] * NUM_PLAYERS
         self._cached_legal_actions: Optional[List[Any]] = None
-        # --- Переменные Fantasyland (пока не используются активно) ---
-        self._is_fantasy_hand = False
-        self._next_fantasy_players: List[int] = []
-        self._current_fantasy_player: Optional[int] = None
-        self._current_normal_player: Optional[int] = None
+        self._is_fantasy_hand = False; self._next_fantasy_players: List[int] = []
+        self._current_fantasy_player: Optional[int] = None; self._current_normal_player: Optional[int] = None
         self._fantasy_cards_count = 14
-        # --- ---
         self._go_to_next_phase()
 
     def _clear_cache(self): self._cached_legal_actions = None
 
-    # ИСПРАВЛЕНО v13: Возвращена корректная логика завершения игры
+    # ИСПРАВЛЕНО v14: Возвращена корректная логика завершения игры
     def _go_to_next_phase(self):
         self._clear_cache(); current_phase = self._phase; next_phase = -1
 
@@ -190,17 +186,69 @@ class OFCPineappleState(pyspiel.State):
                     if is_p1_phase: next_phase = current_phase + 1; self._current_player = pyspiel.PlayerId.CHANCE; self._player_to_deal_to = (self._next_player_to_act + 1) % self._num_players
                     elif is_p2_phase:
                         if current_phase == STREET_FIFTH_PLACE_P2:
-                            next_phase = STREET_REGULAR_SHOWDOWN; self._current_player = pyspiel.PlayerId.TERMINAL # Переход к шоудауну
+                            # После последнего хода P0, переходим к шоудауну
+                            next_phase = STREET_REGULAR_SHOWDOWN
+                            self._current_player = pyspiel.PlayerId.TERMINAL # Устанавливаем терминального игрока
+                            self._calculate_final_returns() # Считаем очки
+                            # Проверяем Fantasy (пока всегда False)
+                            fantasy_triggered = self._check_and_setup_fantasy()
+                            if not fantasy_triggered:
+                                self._game_over = True # Если нет Fantasy, игра окончена
+                            # Если Fantasy сработало, _game_over останется False,
+                            # и следующий вызов _go_to_next_phase перейдет в PHASE_FANTASY_SETUP
                         else:
+                            # Не последняя улица, переходим к сдаче P1
                             next_phase = current_phase + 1; self._current_player = pyspiel.PlayerId.CHANCE; self._player_to_deal_to = self._next_player_to_act
 
-        # --- Логика Шоудауна и завершения игры (пока без Fantasy) ---
+        # --- Логика Шоудауна и перехода к Fantasy/Концу игры ---
         elif current_phase == STREET_REGULAR_SHOWDOWN:
-            self._calculate_final_returns() # Считаем очки
-            # TODO: В будущем здесь будет проверка _check_and_setup_fantasy()
-            self._game_over = True # Завершаем игру после шоудауна
-            next_phase = current_phase # Остаемся в терминальной фазе
-            self._current_player = pyspiel.PlayerId.TERMINAL
+            # Сюда мы попадаем только после перехода из STREET_FIFTH_PLACE_P2
+            # _game_over уже должен быть установлен в True, если не было Fantasy
+            if not self._game_over:
+                # Если мы здесь и игра не окончена, значит сработал Fantasy
+                next_phase = PHASE_FANTASY_SETUP
+                self._current_player = pyspiel.PlayerId.TERMINAL # Переходный узел
+                self._reset_for_new_hand(keep_fantasy_status=True)
+            else:
+                # Игра окончена, остаемся в этой фазе
+                next_phase = current_phase
+                self._current_player = pyspiel.PlayerId.TERMINAL
+
+        # --- Логика Fantasyland (пока только базовые переходы) ---
+        elif current_phase == PHASE_FANTASY_SETUP:
+            if len(self._next_fantasy_players) == 1:
+                self._current_fantasy_player = self._next_fantasy_players[0]; self._current_normal_player = 1 - self._current_fantasy_player; self._is_fantasy_hand = True
+                print(f"Fantasyland начался! Игрок F: {self._current_fantasy_player}, Игрок N: {self._current_normal_player}")
+                next_phase = PHASE_FANTASY_N_DEAL_1; self._current_player = pyspiel.PlayerId.CHANCE; self._player_to_deal_to = self._current_normal_player
+            elif len(self._next_fantasy_players) == 2: print("Warning: Случай с двумя игроками в Fantasy пока не реализован."); self._game_over = True; next_phase = current_phase
+            else: print("Warning: Ошибка в PHASE_FANTASY_SETUP, нет игроков для Fantasy."); self._game_over = True; next_phase = current_phase
+
+        elif current_phase >= PHASE_FANTASY_N_DEAL_1 and current_phase <= PHASE_FANTASY_N_PLACE_5:
+            street_num = (current_phase - PHASE_FANTASY_N_DEAL_1) // 2 + 1; is_deal_phase = current_phase % 2 != 0
+            if is_deal_phase: # DEAL -> PLACE
+                next_phase = current_phase + 1; self._current_player = self._current_normal_player
+                if street_num == 1: self._cards_to_place_count[self._current_player] = 5; self._cards_to_discard_count[self._current_player] = 0
+                else: self._cards_to_place_count[self._current_player] = 2; self._cards_to_discard_count[self._current_player] = 1
+            else: # PLACE -> DEAL (next street or F_DEAL)
+                if current_phase == PHASE_FANTASY_N_PLACE_5: next_phase = PHASE_FANTASY_F_DEAL; self._current_player = pyspiel.PlayerId.CHANCE; self._player_to_deal_to = self._current_fantasy_player
+                else: next_phase = current_phase + 1; self._current_player = pyspiel.PlayerId.CHANCE; self._player_to_deal_to = self._current_normal_player
+
+        elif current_phase == PHASE_FANTASY_F_DEAL:
+            next_phase = PHASE_FANTASY_F_PLACE; self._current_player = self._current_fantasy_player
+            self._cards_to_place_count[self._current_player] = 13; self._cards_to_discard_count[self._current_player] = 1
+
+        elif current_phase == PHASE_FANTASY_F_PLACE:
+            next_phase = PHASE_FANTASY_SHOWDOWN; self._current_player = pyspiel.PlayerId.TERMINAL
+
+        elif current_phase == PHASE_FANTASY_SHOWDOWN:
+            self._calculate_final_returns() # Считаем очки за Fantasy раунд
+            re_fantasy_triggered = False # Заглушка
+            if re_fantasy_triggered:
+                 next_phase = PHASE_FANTASY_SETUP; self._current_player = pyspiel.PlayerId.TERMINAL
+                 self._reset_for_new_hand(keep_fantasy_status=True)
+            else:
+                 # Нет Re-Fantasy, игра окончена (для этой симуляции)
+                 self._game_over = True; next_phase = current_phase; self._current_player = pyspiel.PlayerId.TERMINAL
 
         # --- Обработка конца игры или неизвестной фазы ---
         else:
@@ -209,7 +257,7 @@ class OFCPineappleState(pyspiel.State):
 
         self._phase = next_phase
 
-    # Метод сброса состояния (пока не используется активно)
+    # Метод сброса состояния перед новой рукой
     def _reset_for_new_hand(self, keep_fantasy_status=False):
         self._deck = list(range(NUM_CARDS)); np.random.shuffle(self._deck)
         self._board = [[-1] * TOTAL_CARDS_PLACED for _ in range(NUM_PLAYERS)]
@@ -235,16 +283,17 @@ class OFCPineappleState(pyspiel.State):
 
     def _generate_legal_actions_tuples(self, player):
         # ... (Логика для обычной игры и заглушка для Fantasy F без изменений) ...
-        actions = []; is_place_phase = (self._phase >= STREET_FIRST_PLACE_P1 and self._phase <= STREET_FIFTH_PLACE_P2 and self._phase % 2 == 0)
+        actions = []
+        is_normal_place_phase = (self._phase >= STREET_FIRST_PLACE_P1 and self._phase <= STREET_FIFTH_PLACE_P2 and self._phase % 2 == 0)
         is_fantasy_n_place_phase = (self._phase >= PHASE_FANTASY_N_PLACE_1 and self._phase <= PHASE_FANTASY_N_PLACE_5 and self._phase % 2 == 0) # Пока не используется
         is_fantasy_f_place_phase = (self._phase == PHASE_FANTASY_F_PLACE) # Пока не используется
-        if not (is_place_phase or is_fantasy_n_place_phase or is_fantasy_f_place_phase): return []
+        if not (is_normal_place_phase or is_fantasy_n_place_phase or is_fantasy_f_place_phase): return []
         my_cards = self._current_cards[player]; num_cards_in_hand = len(my_cards)
         num_to_place = self._cards_to_place_count[player]; num_to_discard = self._cards_to_discard_count[player]
         if num_cards_in_hand != num_to_place + num_to_discard: return []
         free_slots_indices = [i for i, card in enumerate(self._board[player]) if card == -1]; num_free_slots = len(free_slots_indices)
         if num_free_slots < num_to_place: return []
-        if is_place_phase: # or is_fantasy_n_place_phase: # Добавить когда будет Fantasy N
+        if is_normal_place_phase: # or is_fantasy_n_place_phase: # Добавить когда будет Fantasy N
             if num_to_discard == 0: # Улица 1
                 if num_cards_in_hand != 5 or num_to_place != 5: return []
                 for slots in itertools.permutations(free_slots_indices, num_to_place):
