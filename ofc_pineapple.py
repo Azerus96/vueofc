@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с ИСПРАВЛЕННЫМ resample_from_infostate (v7 - замена сброса), action_to_string и clone
+# Версия с ИСПРАВЛЕННЫМ legal_actions (v8), resample_from_infostate, action_to_string и clone
 
 import pyspiel
 import numpy as np
@@ -7,84 +7,52 @@ from typing import List, Tuple, Any, Dict, Optional, Set
 import itertools
 from collections import Counter
 import copy
-# import random # Больше не нужен, используем numpy.random.RandomState
+import random # Используется в resample_from_infostate
 
 # --- Константы ---
-NUM_PLAYERS = 2
-NUM_RANKS = 13
-NUM_SUITS = 4
-NUM_CARDS = 52
-TOP_ROW_SIZE = 3
-MIDDLE_ROW_SIZE = 5
-BOTTOM_ROW_SIZE = 5
+# ... (Без изменений) ...
+NUM_PLAYERS = 2; NUM_RANKS = 13; NUM_SUITS = 4; NUM_CARDS = 52
+TOP_ROW_SIZE = 3; MIDDLE_ROW_SIZE = 5; BOTTOM_ROW_SIZE = 5
 TOTAL_CARDS_PLACED = TOP_ROW_SIZE + MIDDLE_ROW_SIZE + BOTTOM_ROW_SIZE
-TOP_SLOTS = list(range(TOP_ROW_SIZE))
-MIDDLE_SLOTS = list(range(TOP_ROW_SIZE, TOP_ROW_SIZE + MIDDLE_ROW_SIZE))
-BOTTOM_SLOTS = list(range(TOP_ROW_SIZE + MIDDLE_ROW_SIZE, TOTAL_CARDS_PLACED))
+TOP_SLOTS = list(range(TOP_ROW_SIZE)); MIDDLE_SLOTS = list(range(TOP_ROW_SIZE, TOP_ROW_SIZE + MIDDLE_ROW_SIZE)); BOTTOM_SLOTS = list(range(TOP_ROW_SIZE + MIDDLE_ROW_SIZE, TOTAL_CARDS_PLACED))
 ALL_SLOTS = list(range(TOTAL_CARDS_PLACED))
-STREET_PREDEAL = 0
-STREET_FIRST_DEAL_P1 = 1
-STREET_FIRST_PLACE_P1 = 2
-STREET_FIRST_DEAL_P2 = 3
-STREET_FIRST_PLACE_P2 = 4
-STREET_SECOND_DEAL_P1 = 5
-STREET_SECOND_PLACE_P1 = 6
-STREET_SECOND_DEAL_P2 = 7
-STREET_SECOND_PLACE_P2 = 8
-STREET_THIRD_DEAL_P1 = 9
-STREET_THIRD_PLACE_P1 = 10
-STREET_THIRD_DEAL_P2 = 11
-STREET_THIRD_PLACE_P2 = 12
-STREET_FOURTH_DEAL_P1 = 13
-STREET_FOURTH_PLACE_P1 = 14
-STREET_FOURTH_DEAL_P2 = 15
-STREET_FOURTH_PLACE_P2 = 16
-STREET_FIFTH_DEAL_P1 = 17
-STREET_FIFTH_PLACE_P1 = 18
-STREET_FIFTH_DEAL_P2 = 19
-STREET_FIFTH_PLACE_P2 = 20
+STREET_PREDEAL = 0; STREET_FIRST_DEAL_P1 = 1; STREET_FIRST_PLACE_P1 = 2; STREET_FIRST_DEAL_P2 = 3; STREET_FIRST_PLACE_P2 = 4
+STREET_SECOND_DEAL_P1 = 5; STREET_SECOND_PLACE_P1 = 6; STREET_SECOND_DEAL_P2 = 7; STREET_SECOND_PLACE_P2 = 8
+STREET_THIRD_DEAL_P1 = 9; STREET_THIRD_PLACE_P1 = 10; STREET_THIRD_DEAL_P2 = 11; STREET_THIRD_PLACE_P2 = 12
+STREET_FOURTH_DEAL_P1 = 13; STREET_FOURTH_PLACE_P1 = 14; STREET_FOURTH_DEAL_P2 = 15; STREET_FOURTH_PLACE_P2 = 16
+STREET_FIFTH_DEAL_P1 = 17; STREET_FIFTH_PLACE_P1 = 18; STREET_FIFTH_DEAL_P2 = 19; STREET_FIFTH_PLACE_P2 = 20
 STREET_REGULAR_SHOWDOWN = 21
-PHASE_FANTASY_DEAL = 30
-PHASE_FANTASY_N_STREET_1 = 31
-PHASE_FANTASY_F_PLACEMENT = 32
-PHASE_FANTASY_N_STREET_2 = 33
-PHASE_FANTASY_N_STREET_3 = 34
-PHASE_FANTASY_N_STREET_4 = 35
-PHASE_FANTASY_N_STREET_5 = 36
-PHASE_FANTASY_SHOWDOWN = 37
-DISCARD_SLOT = -1
-RANKS = "23456789TJQKA"
-SUITS = "shdc"
+PHASE_FANTASY_DEAL = 30; PHASE_FANTASY_N_STREET_1 = 31; PHASE_FANTASY_F_PLACEMENT = 32; PHASE_FANTASY_N_STREET_2 = 33
+PHASE_FANTASY_N_STREET_3 = 34; PHASE_FANTASY_N_STREET_4 = 35; PHASE_FANTASY_N_STREET_5 = 36; PHASE_FANTASY_SHOWDOWN = 37
+DISCARD_SLOT = -1; RANKS = "23456789TJQKA"; SUITS = "shdc"
 
 # --- Функции для карт ---
 # ... (Без изменений) ...
 def card_rank(card_int: int) -> int:
-    if card_int == -1: return -1
+    if card_int == -1: return -1;
     if card_int is None: raise TypeError("card_rank получила None вместо int")
     return card_int // NUM_SUITS
 def card_suit(card_int: int) -> int:
-    if card_int == -1: return -1
+    if card_int == -1: return -1;
     if card_int is None: raise TypeError("card_suit получила None вместо int")
     return card_int % NUM_SUITS
 def card_to_string(card_int: int) -> str:
-    if card_int == -1: return "__"
-    if card_int is None: return "NN" # Обработка None для отладки
+    if card_int == -1: return "__";
+    if card_int is None: return "NN"
     if not 0 <= card_int < NUM_CARDS: raise ValueError(f"Неверный код карты: {card_int}")
     rank_idx = card_rank(card_int); suit_idx = card_suit(card_int)
     if rank_idx < 0 or rank_idx >= len(RANKS): raise ValueError(f"Неверный ранг {rank_idx} для карты {card_int}")
     if suit_idx < 0 or suit_idx >= len(SUITS): raise ValueError(f"Неверная масть {suit_idx} для карты {card_int}")
     return RANKS[rank_idx] + SUITS[suit_idx]
 def string_to_card(card_str: str) -> int:
-    if card_str == "__": return -1
+    if card_str == "__": return -1;
     if card_str is None: raise TypeError("string_to_card получила None")
     if len(card_str) != 2: raise ValueError(f"Неверный формат строки карты: {card_str}")
     rank_char = card_str[0].upper(); suit_char = card_str[1].lower()
     if rank_char not in RANKS or suit_char not in SUITS: raise ValueError(f"Неверный ранг или масть: {card_str}")
     rank = RANKS.index(rank_char); suit = SUITS.index(suit_char); return rank * NUM_SUITS + suit
-def cards_to_strings(card_ints: List[Optional[int]]) -> List[str]:
-    return [card_to_string(c) if c is not None else "NN" for c in card_ints]
-def strings_to_cards(card_strs: List[str]) -> List[int]:
-    return [string_to_card(s) for s in card_strs]
+def cards_to_strings(card_ints: List[Optional[int]]) -> List[str]: return [card_to_string(c) if c is not None else "NN" for c in card_ints]
+def strings_to_cards(card_strs: List[str]) -> List[int]: return [string_to_card(s) for s in card_strs]
 
 # --- Оценка Комбинаций ---
 # ... (Без изменений) ...
@@ -208,12 +176,39 @@ class OFCPineappleState(pyspiel.State):
     def current_player(self): return self._current_player
     def is_chance_node(self): return self._current_player == pyspiel.PlayerId.CHANCE
     def is_terminal(self): return self._game_over
-    def legal_actions(self, player: int) -> List[int]:
-        if self.is_chance_node() or self.is_terminal() or self._current_player != player: return []
-        if self._cached_legal_actions is not None: return list(range(len(self._cached_legal_actions)))
-        actions_tuples = self._generate_legal_actions_tuples(player); self._cached_legal_actions = actions_tuples
+
+    # ИСПРАВЛЕНО v8: Сигнатура и логика для соответствия OpenSpiel стандарту
+    def legal_actions(self, player: Optional[int] = None) -> List[int]:
+        """Возвращает список индексов легальных действий."""
+        if player is None:
+            player_for_actions = self.current_player()
+            # Если не ход игрока, возвращаем пустой список
+            if player_for_actions < 0:
+                return []
+        else:
+            player_for_actions = player
+            # Если запросили действия для игрока, который сейчас не ходит,
+            # или это шанс/терминальное состояние, возвращаем пустой список.
+            # (Наша генерация действий все равно зависит от _current_cards текущего игрока)
+            if player_for_actions != self.current_player() or self.is_chance_node() or self.is_terminal():
+                 return []
+
+        # Используем кэш, если он есть (он всегда для текущего игрока)
+        if self._cached_legal_actions is not None and player_for_actions == self.current_player():
+            return list(range(len(self._cached_legal_actions)))
+
+        # Генерируем кортежи действий для player_for_actions (который равен current_player)
+        actions_tuples = self._generate_legal_actions_tuples(player_for_actions)
+
+        # Кэшируем только если генерировали для текущего игрока
+        if player_for_actions == self.current_player():
+            self._cached_legal_actions = actions_tuples
+
+        # Возвращаем индексы от 0 до N-1
         return list(range(len(actions_tuples)))
+
     def _generate_legal_actions_tuples(self, player):
+        # ... (Без изменений) ...
         actions = []; is_place_phase = (self._phase >= STREET_FIRST_PLACE_P1 and self._phase <= STREET_FIFTH_PLACE_P2 and self._phase % 2 == 0)
         if not is_place_phase: return []
         my_cards = self._current_cards[player]; num_cards_in_hand = len(my_cards)
@@ -233,6 +228,7 @@ class OFCPineappleState(pyspiel.State):
                     placement = tuple((cards_to_place[i], slots[i]) for i in range(num_to_place)); action = (placement, card_discard); actions.append(action)
         return actions
     def apply_action(self, action_index_or_outcome):
+        # ... (Без изменений) ...
         if self.is_chance_node():
             player = self._player_to_deal_to; num_cards_to_deal = 0
             if self._phase in [STREET_FIRST_DEAL_P1, STREET_FIRST_DEAL_P2]: num_cards_to_deal = 5
@@ -244,7 +240,7 @@ class OFCPineappleState(pyspiel.State):
         if self.is_terminal(): raise ValueError("Cannot apply action on terminal node")
         if self.is_chance_node(): raise ValueError("Cannot apply player action on chance node")
         player = self._current_player; action_index = action_index_or_outcome
-        if self._cached_legal_actions is None: self.legal_actions(player)
+        if self._cached_legal_actions is None: self.legal_actions(player) # Вызовет генерацию и кэширование
         if self._cached_legal_actions is None or action_index < 0 or action_index >= len(self._cached_legal_actions): raise ValueError(f"Неверный индекс действия: {action_index} (доступно: {len(self._cached_legal_actions) if self._cached_legal_actions is not None else 'кэш пуст'}) для P{player} в фазе {self._phase}")
         action_tuple = self._cached_legal_actions[action_index]
         placement = []; card_discard = -1; num_placed = 0
@@ -263,6 +259,7 @@ class OFCPineappleState(pyspiel.State):
         self._current_cards[player] = []; self._total_cards_placed[player] += num_placed; self._cards_to_place_count[player] = 0; self._cards_to_discard_count[player] = 0
         self._go_to_next_phase()
     def action_to_string(self, player: int, action_index: int) -> str:
+        # ... (Без изменений) ...
         action_tuple = None
         if self._cached_legal_actions is not None and 0 <= action_index < len(self._cached_legal_actions): action_tuple = self._cached_legal_actions[action_index]
         elif self._current_player == player:
@@ -280,6 +277,7 @@ class OFCPineappleState(pyspiel.State):
         except Exception as e: return f"ErrorFormattingAction({action_tuple})"
         return f"UnknownActionFormat({action_tuple})"
     def _calculate_final_returns(self):
+        # ... (Без изменений) ...
         if not all(count == TOTAL_CARDS_PLACED for count in self._total_cards_placed): self._current_hand_returns = [0.0] * NUM_PLAYERS; return
         scores = [0] * NUM_PLAYERS; royalties = [0] * NUM_PLAYERS; is_dead = [False] * NUM_PLAYERS; evals = [{}, {}, {}]
         for p in range(NUM_PLAYERS):
@@ -301,9 +299,11 @@ class OFCPineappleState(pyspiel.State):
         diff = scores[p0] - scores[p1]; self._current_hand_returns = [diff, -diff]; self._cumulative_returns[0] += diff; self._cumulative_returns[1] -= diff
     def _check_and_setup_fantasy(self) -> bool: return False # Заглушка
     def returns(self):
+        # ... (Без изменений) ...
         if not self._game_over: return [0.0] * self._num_players
         return self._cumulative_returns
     def information_state_string(self, player: int) -> str:
+        # ... (Без изменений) ...
         if player < 0 or player >= self._num_players: return f"Phase:{self._phase};GameOver:{self._game_over}"
         parts = []; parts.append(f"P:{player}"); parts.append(f"Ph:{self._phase}")
         my_board_cards = self._board[player]; my_board_str = f"B:[{' '.join(cards_to_strings(my_board_cards[:3]))}|{' '.join(cards_to_strings(my_board_cards[3:8]))}|{' '.join(cards_to_strings(my_board_cards[8:]))}]"; parts.append(my_board_str)
@@ -321,6 +321,7 @@ class OFCPineappleState(pyspiel.State):
         return ";".join(parts)
     def observation_string(self, player): return self.information_state_string(player)
     def clone(self):
+        # ... (Без изменений, использует self.get_game()) ...
         cloned = type(self)(self.get_game()); cloned._num_players = self._num_players; cloned._current_player = self._current_player; cloned._dealer_button = self._dealer_button
         cloned._next_player_to_act = self._next_player_to_act; cloned._player_to_deal_to = self._player_to_deal_to; cloned._phase = self._phase
         cloned._fantasy_cards_count = self._fantasy_cards_count; cloned._fantasy_player_has_placed = self._fantasy_player_has_placed; cloned._game_over = self._game_over
@@ -352,8 +353,7 @@ class OFCPineappleState(pyspiel.State):
         all_cards = set(range(NUM_CARDS)); unknown_cards_set = all_cards - known_cards; unknown_cards_list = list(unknown_cards_set)
 
         # 3. Перемешать неизвестные карты
-        # Используем локальный RNG для независимого сэмплирования
-        rng = np.random.RandomState()
+        rng = np.random.RandomState() # Используем локальный RNG
         rng.shuffle(unknown_cards_list)
         unknown_cards_iter = iter(unknown_cards_list)
 
@@ -379,10 +379,8 @@ class OFCPineappleState(pyspiel.State):
         try:
             # Рука оппонента (если нужна)
             cloned_state._current_cards[opponent_id] = [next(unknown_cards_iter) for _ in range(opponent_hand_size_needed)]
-
             # ИСПРАВЛЕНО v7: Сброс оппонента (ЗАМЕНЯЕМ полностью)
             cloned_state._discards[opponent_id] = [next(unknown_cards_iter) for _ in range(opponent_discard_count_needed)]
-
             # Колода
             cloned_state._deck = list(unknown_cards_iter) # Оставшиеся карты
         except StopIteration:
@@ -393,7 +391,6 @@ class OFCPineappleState(pyspiel.State):
 
         # 7. Вернуть клон
         return cloned_state
-
 
     def __str__(self):
         player = self.current_player(); player_to_show = player if player >= 0 else 0
