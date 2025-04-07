@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с ИСПРАВЛЕННЫМ resample_from_infostate (v6 - использует локальный random.Random()), action_to_string и clone
+# Версия с ИСПРАВЛЕННЫМ resample_from_infostate (v7 - замена сброса), action_to_string и clone
 
 import pyspiel
 import numpy as np
@@ -7,7 +7,7 @@ from typing import List, Tuple, Any, Dict, Optional, Set
 import itertools
 from collections import Counter
 import copy
-import random # <--- Импорт random
+# import random # Больше не нужен, используем numpy.random.RandomState
 
 # --- Константы ---
 NUM_PLAYERS = 2
@@ -211,8 +211,7 @@ class OFCPineappleState(pyspiel.State):
     def legal_actions(self, player: int) -> List[int]:
         if self.is_chance_node() or self.is_terminal() or self._current_player != player: return []
         if self._cached_legal_actions is not None: return list(range(len(self._cached_legal_actions)))
-        actions_tuples = self._generate_legal_actions_tuples(player)
-        self._cached_legal_actions = actions_tuples
+        actions_tuples = self._generate_legal_actions_tuples(player); self._cached_legal_actions = actions_tuples
         return list(range(len(actions_tuples)))
     def _generate_legal_actions_tuples(self, player):
         actions = []; is_place_phase = (self._phase >= STREET_FIRST_PLACE_P1 and self._phase <= STREET_FIFTH_PLACE_P2 and self._phase % 2 == 0)
@@ -229,8 +228,7 @@ class OFCPineappleState(pyspiel.State):
         else: # Улицы 2-5
             if num_cards_in_hand != 3 or num_to_place != 2 or num_to_discard != 1: return []
             for discard_idx in range(num_cards_in_hand):
-                card_discard = my_cards[discard_idx]
-                cards_to_place = my_cards[:discard_idx] + my_cards[discard_idx+1:]
+                card_discard = my_cards[discard_idx]; cards_to_place = my_cards[:discard_idx] + my_cards[discard_idx+1:]
                 for slots in itertools.permutations(free_slots_indices, num_to_place):
                     placement = tuple((cards_to_place[i], slots[i]) for i in range(num_to_place)); action = (placement, card_discard); actions.append(action)
         return actions
@@ -262,9 +260,7 @@ class OFCPineappleState(pyspiel.State):
             if self._board[player][slot_idx] != -1: raise ValueError(f"Слот {slot_idx} уже занят! Доска: {cards_to_strings(self._board[player])}, Действие: {action_tuple}")
             self._board[player][slot_idx] = card
         if card_discard != -1: self._discards[player].append(card_discard)
-        self._current_cards[player] = []
-        self._total_cards_placed[player] += num_placed
-        self._cards_to_place_count[player] = 0; self._cards_to_discard_count[player] = 0
+        self._current_cards[player] = []; self._total_cards_placed[player] += num_placed; self._cards_to_place_count[player] = 0; self._cards_to_discard_count[player] = 0
         self._go_to_next_phase()
     def action_to_string(self, player: int, action_index: int) -> str:
         action_tuple = None
@@ -338,7 +334,7 @@ class OFCPineappleState(pyspiel.State):
     def resample_from_infostate(self, player_id: int, probability_sampler) -> 'OFCPineappleState':
         """
         Создает новое состояние, сэмплируя неизвестную информацию (детерминизация).
-        Использует random.shuffle для перемешивания. probability_sampler игнорируется.
+        Использует np.random.RandomState для перемешивания. probability_sampler игнорируется.
         """
         if not (0 <= player_id < self._num_players): raise ValueError(f"Неверный player_id: {player_id}")
         opponent_id = 1 - player_id
@@ -356,8 +352,8 @@ class OFCPineappleState(pyspiel.State):
         all_cards = set(range(NUM_CARDS)); unknown_cards_set = all_cards - known_cards; unknown_cards_list = list(unknown_cards_set)
 
         # 3. Перемешать неизвестные карты
-        # ИСПРАВЛЕНО v6: Используем локальный экземпляр random.Random()
-        rng = random.Random()
+        # Используем локальный RNG для независимого сэмплирования
+        rng = np.random.RandomState()
         rng.shuffle(unknown_cards_list)
         unknown_cards_iter = iter(unknown_cards_list)
 
@@ -381,10 +377,14 @@ class OFCPineappleState(pyspiel.State):
 
         # 6. Заполнить неизвестное в клоне
         try:
+            # Рука оппонента (если нужна)
             cloned_state._current_cards[opponent_id] = [next(unknown_cards_iter) for _ in range(opponent_hand_size_needed)]
-            num_discards_to_sample = opponent_discard_count_needed - len(cloned_state._discards[opponent_id])
-            cloned_state._discards[opponent_id].extend([next(unknown_cards_iter) for _ in range(num_discards_to_sample)])
-            cloned_state._deck = list(unknown_cards_iter)
+
+            # ИСПРАВЛЕНО v7: Сброс оппонента (ЗАМЕНЯЕМ полностью)
+            cloned_state._discards[opponent_id] = [next(unknown_cards_iter) for _ in range(opponent_discard_count_needed)]
+
+            # Колода
+            cloned_state._deck = list(unknown_cards_iter) # Оставшиеся карты
         except StopIteration:
             raise Exception(f"Ошибка в resample_from_infostate: Не хватило неизвестных карт. "
                             f"Фаза: {current_phase}, Игрок: {player_id}, "
@@ -393,6 +393,7 @@ class OFCPineappleState(pyspiel.State):
 
         # 7. Вернуть клон
         return cloned_state
+
 
     def __str__(self):
         player = self.current_player(); player_to_show = player if player >= 0 else 0
