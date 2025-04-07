@@ -16,7 +16,7 @@
 See Cowling, Powley, and Whitehouse 2011.
 https://ieeexplore.ieee.org/document/6203567
 
-Исправлено v2: get_state_key передает player_id, добавлен импорт traceback
+Исправлено v3: get_state_key, импорт traceback, отступ в _select_candidate_actions
 """
 
 import copy
@@ -139,14 +139,15 @@ class ISMCTSBot(pyspiel.Bot):
       return [(legal_actions[0], 1.0)]
 
     # Создаем корневой узел для текущего инфостейта
-    self._root_node = self.lookup_or_create_node(state)
+    self._root_node = self.lookup_or_create_node(state) # Используем lookup_or_create_node
     if not self._root_node:
-        raise RuntimeError("Failed to create root node.")
+        raise RuntimeError("Failed to create root node.") # Не должно происходить
 
     root_infostate_key = self.get_state_key(state)
 
     # Основной цикл симуляций
     for sim_count in range(self._max_simulations):
+      # Сэмплируем полное состояние мира, совместимое с текущим инфостейтом
       sampled_root_state = self.sample_root_state(state)
       if not sampled_root_state:
           raise RuntimeError(f"Simulation {sim_count+1}: Failed to sample root state.")
@@ -161,18 +162,21 @@ class ISMCTSBot(pyspiel.Bot):
           print(f"Ошибка: {e}")
           traceback.print_exc() # Теперь traceback импортирован
           print("Продолжение поиска после ошибки в симуляции...")
-          continue
+          continue # Пропустить эту симуляцию
 
     # Формируем финальную политику
     if self._allow_inconsistent_action_sets:
+      # Перефильтровываем действия, если набор легальных действий мог измениться
       current_legal_actions = state.legal_actions(current_player_id) # Передаем ID
       temp_node = self.filter_illegals(self._root_node, current_legal_actions)
       if temp_node.total_visits <= 0:
+          # Если все посещенные действия стали нелегальными, возвращаем равномерную политику
           print("Warning: All visited actions became illegal. Returning uniform policy.")
           num_legal = len(current_legal_actions)
           return [(a, 1.0 / num_legal) for a in current_legal_actions] if num_legal > 0 else []
       return self.get_final_policy(state, temp_node)
     else:
+      # Проверяем, что узел был посещен
       if self._root_node.total_visits <= 0:
            print(f"Warning: Root node has {self._root_node.total_visits} visits after {self._max_simulations} simulations. Returning uniform policy.")
            current_legal_actions = state.legal_actions(current_player_id) # Передаем ID
@@ -348,14 +352,28 @@ class ISMCTSBot(pyspiel.Bot):
     return action_value + exploration_term
 
   def _select_candidate_actions(self, node):
-    candidates = []; max_action_value = -float('inf')
-    for child in node.child_info.values(): value = self._action_value(node, child);
-        if value > max_action_value: max_action_value = value
+    """Selects the best action(s) based on the policy value."""
+    candidates = []
+    max_action_value = -float('inf')
+
+    # Находим максимальное значение среди всех дочерних узлов
+    for child in node.child_info.values():
+        value = self._action_value(node, child)
+        # ИСПРАВЛЕН ОТСТУП v3:
+        if value > max_action_value:
+            max_action_value = value
+
+    # Выбираем все действия, значение которых близко к максимальному
     for action, child in node.child_info.items():
-      if self._action_value(node, child) >= max_action_value - TIE_TOLERANCE: candidates.append(action)
+      if self._action_value(node, child) >= max_action_value - TIE_TOLERANCE:
+        candidates.append(action)
+
+    # Если кандидатов нет (например, все значения -inf), возвращаем пустой список
     return candidates
 
+
   def select_action(self, node):
+    """Selects an action from the node, breaking ties randomly."""
     if not node.child_info: print("Warning: select_action called on node with no children."); return pyspiel.INVALID_ACTION
     candidates = self._select_candidate_actions(node)
     if not candidates: print("Warning: No candidate actions found in select_action. Selecting random child."); candidates = list(node.child_info.keys());
@@ -363,6 +381,7 @@ class ISMCTSBot(pyspiel.Bot):
     return candidates[self._random_state.randint(len(candidates))]
 
   def check_expand(self, node, legal_actions):
+    """Checks if the node needs expansion and returns an action to expand."""
     if not self._allow_inconsistent_action_sets:
         if len(node.child_info) == len(legal_actions): return pyspiel.INVALID_ACTION
     legal_actions_set = set(legal_actions); current_actions_set = set(node.child_info.keys()); missing_actions = list(legal_actions_set - current_actions_set)
@@ -370,9 +389,18 @@ class ISMCTSBot(pyspiel.Bot):
     else: return missing_actions[self._random_state.randint(len(missing_actions))]
 
   def run_simulation(self, state):
+    """Runs a simulation from the given state, updating the tree."""
     if state.is_terminal(): return state.returns()
     if state.is_chance_node():
-      outcomes_with_probs = state.chance_outcomes()
+      # ИСПРАВЛЕНО v3: Используем try-except для chance_outcomes
+      try:
+          outcomes_with_probs = state.chance_outcomes()
+      except Exception as e:
+          print(f"Ошибка при вызове state.chance_outcomes(): {e}")
+          print(f"Состояние:\n{state}")
+          # Возвращаем 0, так как не можем продолжить
+          return np.zeros(self._game.num_players())
+
       if not outcomes_with_probs: print(f"Warning: Chance node with no outcomes at state:\n{state}"); return np.zeros(self._game.num_players())
       action_list, prob_list = zip(*outcomes_with_probs); prob_sum = sum(prob_list)
       if not np.isclose(prob_sum, 1.0): print(f"Warning: Chance outcome probabilities sum to {prob_sum}, renormalizing."); prob_list = np.array(prob_list) / prob_sum
@@ -393,10 +421,6 @@ class ISMCTSBot(pyspiel.Bot):
     if node.total_visits == UNEXPANDED_VISIT_COUNT:
       node.total_visits = 0
       returns = self._evaluator.evaluate(state)
-      # Для первого посещения, действие не выбирается, но нам нужно обновить узел
-      # Мы не можем обновить child_info, так как действия не было.
-      # Обновление total_visits произойдет ниже.
-      # Важно: результат evaluate будет возвращен и использован выше по стеку.
     else:
       chosen_action = self.check_expand(node, legal_actions)
       if chosen_action != pyspiel.INVALID_ACTION:
@@ -414,7 +438,6 @@ class ISMCTSBot(pyspiel.Bot):
 
     # Обратное распространение
     node.total_visits += 1
-    # Обновляем статистику только если было выбрано/расширено действие
     if chosen_action != pyspiel.INVALID_ACTION:
         if chosen_action not in node.child_info:
              print(f"Warning: Child info for action {chosen_action} not found during backpropagation. Creating with prior=0.")
