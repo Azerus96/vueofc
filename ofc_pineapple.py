@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с ИСПРАВЛЕННЫМ resample_from_infostate (v4 - использует локальный RNG), action_to_string и clone
+# Версия с ИСПРАВЛЕННЫМ resample_from_infostate (v5 - использует random.shuffle), action_to_string и clone
 
 import pyspiel
 import numpy as np
@@ -7,6 +7,7 @@ from typing import List, Tuple, Any, Dict, Optional, Set
 import itertools
 from collections import Counter
 import copy
+import random # <--- Добавлен импорт random
 
 # --- Константы ---
 NUM_PLAYERS = 2
@@ -365,45 +366,22 @@ class OFCPineappleState(pyspiel.State):
 
     def clone(self):
         """Создает глубокую копию состояния."""
-        # ИСПРАВЛЕНО: Используем self.get_game()
-        cloned = type(self)(self.get_game())
-
-        # Копируем неизменяемые или простые типы
-        cloned._num_players = self._num_players
-        cloned._current_player = self._current_player
-        cloned._dealer_button = self._dealer_button
-        cloned._next_player_to_act = self._next_player_to_act
-        cloned._player_to_deal_to = self._player_to_deal_to
-        cloned._phase = self._phase
-        cloned._fantasy_cards_count = self._fantasy_cards_count
-        cloned._fantasy_player_has_placed = self._fantasy_player_has_placed
-        cloned._game_over = self._game_over
-
-        # Копируем списки и словари
-        cloned._deck = self._deck[:] # Поверхностная копия списка чисел
-        cloned._cards_to_place_count = self._cards_to_place_count[:]
-        cloned._cards_to_discard_count = self._cards_to_discard_count[:]
-        cloned._in_fantasy = self._in_fantasy[:]
-        cloned._can_enter_fantasy = self._can_enter_fantasy[:]
-        cloned._total_cards_placed = self._total_cards_placed[:]
-        cloned._cumulative_returns = self._cumulative_returns[:]
-        cloned._current_hand_returns = self._current_hand_returns[:]
-
-        # Глубокие копии для вложенных структур
-        cloned._board = copy.deepcopy(self._board)
-        cloned._current_cards = copy.deepcopy(self._current_cards)
-        cloned._discards = copy.deepcopy(self._discards)
-        cloned._fantasy_trigger = copy.deepcopy(self._fantasy_trigger) # Хотя пока None
-
-        # Кэш не копируем, он будет пересоздан при необходимости
+        cloned = type(self)(self.get_game()) # Используем self.get_game()
+        cloned._num_players = self._num_players; cloned._current_player = self._current_player; cloned._dealer_button = self._dealer_button
+        cloned._next_player_to_act = self._next_player_to_act; cloned._player_to_deal_to = self._player_to_deal_to; cloned._phase = self._phase
+        cloned._fantasy_cards_count = self._fantasy_cards_count; cloned._fantasy_player_has_placed = self._fantasy_player_has_placed; cloned._game_over = self._game_over
+        cloned._deck = self._deck[:]; cloned._cards_to_place_count = self._cards_to_place_count[:]; cloned._cards_to_discard_count = self._cards_to_discard_count[:]
+        cloned._in_fantasy = self._in_fantasy[:]; cloned._can_enter_fantasy = self._can_enter_fantasy[:]; cloned._total_cards_placed = self._total_cards_placed[:]
+        cloned._cumulative_returns = self._cumulative_returns[:]; cloned._current_hand_returns = self._current_hand_returns[:]
+        cloned._board = copy.deepcopy(self._board); cloned._current_cards = copy.deepcopy(self._current_cards)
+        cloned._discards = copy.deepcopy(self._discards); cloned._fantasy_trigger = copy.deepcopy(self._fantasy_trigger)
         cloned._cached_legal_actions = None
-
         return cloned
 
     def resample_from_infostate(self, player_id: int, probability_sampler) -> 'OFCPineappleState':
         """
         Создает новое состояние, сэмплируя неизвестную информацию (детерминизация).
-        Использует np.random для перемешивания. probability_sampler игнорируется.
+        Использует random.shuffle для перемешивания. probability_sampler игнорируется.
         """
         if not (0 <= player_id < self._num_players):
             raise ValueError(f"Неверный player_id: {player_id}")
@@ -427,9 +405,8 @@ class OFCPineappleState(pyspiel.State):
         unknown_cards_list = list(unknown_cards_set)
 
         # 3. Перемешать неизвестные карты
-        # ИСПРАВЛЕНО: Используем локальный RNG для независимого сэмплирования
-        rng = np.random.RandomState()
-        rng.shuffle(unknown_cards_list)
+        # ИСПРАВЛЕНО v5: Используем Python's random.shuffle
+        random.shuffle(unknown_cards_list)
         unknown_cards_iter = iter(unknown_cards_list)
 
         # 4. Создать клон состояния
