@@ -16,14 +16,14 @@
 See Cowling, Powley, and Whitehouse 2011.
 https://ieeexplore.ieee.org/document/6203567
 
-Исправлено v3: get_state_key, импорт traceback, отступ в _select_candidate_actions
+Исправлено v4: get_state_key, импорт traceback, отступы в _select_candidate_actions и select_action
 """
 
 import copy
 import enum
 import numpy as np
 import pyspiel
-import traceback # <--- ДОБАВЛЕН ИМПОРТ
+import traceback # <--- Импорт traceback
 
 UNLIMITED_NUM_WORLD_SAMPLES = -1
 UNEXPANDED_VISIT_COUNT = -1
@@ -374,11 +374,18 @@ class ISMCTSBot(pyspiel.Bot):
 
   def select_action(self, node):
     """Selects an action from the node, breaking ties randomly."""
-    if not node.child_info: print("Warning: select_action called on node with no children."); return pyspiel.INVALID_ACTION
+    if not node.child_info:
+        print("Warning: select_action called on node with no children.")
+        return pyspiel.INVALID_ACTION
     candidates = self._select_candidate_actions(node)
-    if not candidates: print("Warning: No candidate actions found in select_action. Selecting random child."); candidates = list(node.child_info.keys());
-        if not candidates: return pyspiel.INVALID_ACTION
+    if not candidates:
+        print("Warning: No candidate actions found in select_action. Selecting random child.")
+        candidates = list(node.child_info.keys())
+        # ИСПРАВЛЕН ОТСТУП v4:
+        if not candidates: # Check if still empty after getting all keys
+            return pyspiel.INVALID_ACTION
     return candidates[self._random_state.randint(len(candidates))]
+
 
   def check_expand(self, node, legal_actions):
     """Checks if the node needs expansion and returns an action to expand."""
