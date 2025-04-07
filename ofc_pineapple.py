@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с ИСПРАВЛЕННЫМ завершением игры (v14 - возврат к логике v11), chance_outcomes, resample_from_infostate, action_to_string и clone
+# Версия v14.1 - Добавлена отладка в _go_to_next_phase для перехода 20->21
 
 import pyspiel
 import numpy as np
@@ -10,31 +10,18 @@ import copy
 import random # Используется в resample_from_infostate
 
 # --- Константы ---
-NUM_PLAYERS = 2
-NUM_RANKS = 13
-NUM_SUITS = 4
-NUM_CARDS = 52
-TOP_ROW_SIZE = 3
-MIDDLE_ROW_SIZE = 5
-BOTTOM_ROW_SIZE = 5
+# ... (Без изменений) ...
+NUM_PLAYERS = 2; NUM_RANKS = 13; NUM_SUITS = 4; NUM_CARDS = 52
+TOP_ROW_SIZE = 3; MIDDLE_ROW_SIZE = 5; BOTTOM_ROW_SIZE = 5
 TOTAL_CARDS_PLACED = TOP_ROW_SIZE + MIDDLE_ROW_SIZE + BOTTOM_ROW_SIZE
-TOP_SLOTS = list(range(TOP_ROW_SIZE))
-MIDDLE_SLOTS = list(range(TOP_ROW_SIZE, TOP_ROW_SIZE + MIDDLE_ROW_SIZE))
-BOTTOM_SLOTS = list(range(TOP_ROW_SIZE + MIDDLE_ROW_SIZE, TOTAL_CARDS_PLACED))
+TOP_SLOTS = list(range(TOP_ROW_SIZE)); MIDDLE_SLOTS = list(range(TOP_ROW_SIZE, TOP_ROW_SIZE + MIDDLE_ROW_SIZE)); BOTTOM_SLOTS = list(range(TOP_ROW_SIZE + MIDDLE_ROW_SIZE, TOTAL_CARDS_PLACED))
 ALL_SLOTS = list(range(TOTAL_CARDS_PLACED))
-STREET_PREDEAL = 0
-STREET_FIRST_DEAL_P1 = 1; STREET_FIRST_PLACE_P1 = 2
-STREET_FIRST_DEAL_P2 = 3; STREET_FIRST_PLACE_P2 = 4
-STREET_SECOND_DEAL_P1 = 5; STREET_SECOND_PLACE_P1 = 6
-STREET_SECOND_DEAL_P2 = 7; STREET_SECOND_PLACE_P2 = 8
-STREET_THIRD_DEAL_P1 = 9; STREET_THIRD_PLACE_P1 = 10
-STREET_THIRD_DEAL_P2 = 11; STREET_THIRD_PLACE_P2 = 12
-STREET_FOURTH_DEAL_P1 = 13; STREET_FOURTH_PLACE_P1 = 14
-STREET_FOURTH_DEAL_P2 = 15; STREET_FOURTH_PLACE_P2 = 16
-STREET_FIFTH_DEAL_P1 = 17; STREET_FIFTH_PLACE_P1 = 18
-STREET_FIFTH_DEAL_P2 = 19; STREET_FIFTH_PLACE_P2 = 20
-STREET_REGULAR_SHOWDOWN = 21 # Фаза после подсчета очков (терминальная или переход к Fantasy)
-# Фазы Fantasyland (пока не используются активно в переходах)
+STREET_PREDEAL = 0; STREET_FIRST_DEAL_P1 = 1; STREET_FIRST_PLACE_P1 = 2; STREET_FIRST_DEAL_P2 = 3; STREET_FIRST_PLACE_P2 = 4
+STREET_SECOND_DEAL_P1 = 5; STREET_SECOND_PLACE_P1 = 6; STREET_SECOND_DEAL_P2 = 7; STREET_SECOND_PLACE_P2 = 8
+STREET_THIRD_DEAL_P1 = 9; STREET_THIRD_PLACE_P1 = 10; STREET_THIRD_DEAL_P2 = 11; STREET_THIRD_PLACE_P2 = 12
+STREET_FOURTH_DEAL_P1 = 13; STREET_FOURTH_PLACE_P1 = 14; STREET_FOURTH_DEAL_P2 = 15; STREET_FOURTH_PLACE_P2 = 16
+STREET_FIFTH_DEAL_P1 = 17; STREET_FIFTH_PLACE_P1 = 18; STREET_FIFTH_DEAL_P2 = 19; STREET_FIFTH_PLACE_P2 = 20
+STREET_REGULAR_SHOWDOWN = 21
 PHASE_FANTASY_SETUP = 30; PHASE_FANTASY_N_DEAL_1 = 31; PHASE_FANTASY_N_PLACE_1 = 32
 PHASE_FANTASY_N_DEAL_2 = 33; PHASE_FANTASY_N_PLACE_2 = 34; PHASE_FANTASY_N_DEAL_3 = 35; PHASE_FANTASY_N_PLACE_3 = 36
 PHASE_FANTASY_N_DEAL_4 = 37; PHASE_FANTASY_N_PLACE_4 = 38; PHASE_FANTASY_N_DEAL_5 = 39; PHASE_FANTASY_N_PLACE_5 = 40
@@ -170,6 +157,7 @@ class OFCPineappleState(pyspiel.State):
     # ИСПРАВЛЕНО v14: Возвращена корректная логика завершения игры
     def _go_to_next_phase(self):
         self._clear_cache(); current_phase = self._phase; next_phase = -1
+        # print(f"DEBUG: Entering _go_to_next_phase from phase {current_phase}, game_over={self._game_over}") # Отладка
 
         # --- Логика обычной игры ---
         if current_phase >= STREET_PREDEAL and current_phase < STREET_REGULAR_SHOWDOWN:
@@ -190,11 +178,10 @@ class OFCPineappleState(pyspiel.State):
                             next_phase = STREET_REGULAR_SHOWDOWN
                             self._current_player = pyspiel.PlayerId.TERMINAL # Устанавливаем терминального игрока
                             self._calculate_final_returns() # Считаем очки
-                            # Проверяем Fantasy (пока всегда False)
-                            fantasy_triggered = self._check_and_setup_fantasy()
+                            fantasy_triggered = self._check_and_setup_fantasy() # Проверяем Fantasy
                             if not fantasy_triggered:
                                 self._game_over = True # Если нет Fantasy, игра окончена
-                            # Если Fantasy сработало, _game_over останется False
+                            # print(f"DEBUG: After phase 20: fantasy={fantasy_triggered}, game_over={self._game_over}") # Отладка
                         else:
                             # Не последняя улица, переходим к сдаче P1
                             next_phase = current_phase + 1; self._current_player = pyspiel.PlayerId.CHANCE; self._player_to_deal_to = self._next_player_to_act
@@ -203,7 +190,6 @@ class OFCPineappleState(pyspiel.State):
         elif current_phase == STREET_REGULAR_SHOWDOWN:
             # Сюда мы попадаем только после перехода из STREET_FIFTH_PLACE_P2
             # _game_over уже должен быть установлен в True, если не было Fantasy
-            # Если Fantasy сработало, _game_over == False
             if not self._game_over:
                  # TODO: Переход к PHASE_FANTASY_SETUP
                  print("Warning: Переход в Fantasyland еще не реализован, завершаем игру.")
@@ -226,6 +212,7 @@ class OFCPineappleState(pyspiel.State):
              next_phase = current_phase
 
         self._phase = next_phase
+        # print(f"DEBUG: Exiting _go_to_next_phase to phase {self._phase}, game_over={self._game_over}, player={self._current_player}") # Отладка
 
     # Метод сброса состояния (пока не используется активно)
     def _reset_for_new_hand(self, keep_fantasy_status=False):
