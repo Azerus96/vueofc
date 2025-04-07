@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с resample_from_infostate, исправленным action_to_string и clone (v3)
+# Версия с ИСПРАВЛЕННЫМ resample_from_infostate (v4 - использует локальный RNG), action_to_string и clone
 
 import pyspiel
 import numpy as np
@@ -204,7 +204,7 @@ class OFCPineappleState(pyspiel.State):
                         next_phase = STREET_REGULAR_SHOWDOWN
                         self._current_player = pyspiel.PlayerId.TERMINAL
                         self._calculate_final_returns()
-                        if not self._check_and_setup_fantasy(): # Отступ исправлен
+                        if not self._check_and_setup_fantasy():
                             self._game_over = True
                     else:
                         next_phase = current_phase + 1
@@ -427,7 +427,9 @@ class OFCPineappleState(pyspiel.State):
         unknown_cards_list = list(unknown_cards_set)
 
         # 3. Перемешать неизвестные карты
-        np.random.shuffle(unknown_cards_list)
+        # ИСПРАВЛЕНО: Используем локальный RNG для независимого сэмплирования
+        rng = np.random.RandomState()
+        rng.shuffle(unknown_cards_list)
         unknown_cards_iter = iter(unknown_cards_list)
 
         # 4. Создать клон состояния
