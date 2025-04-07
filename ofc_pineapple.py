@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с resample_from_infostate, исправленным action_to_string и отладкой очков (v2 - исправлен IndentationError)
+# Версия с resample_from_infostate, исправленным action_to_string и clone (v3)
 
 import pyspiel
 import numpy as np
@@ -204,9 +204,7 @@ class OFCPineappleState(pyspiel.State):
                         next_phase = STREET_REGULAR_SHOWDOWN
                         self._current_player = pyspiel.PlayerId.TERMINAL
                         self._calculate_final_returns()
-                        # Проверяем Fantasy (пока заглушка)
-                        # ИСПРАВЛЕН ОТСТУП ЗДЕСЬ:
-                        if not self._check_and_setup_fantasy():
+                        if not self._check_and_setup_fantasy(): # Отступ исправлен
                             self._game_over = True
                     else:
                         next_phase = current_phase + 1
@@ -366,16 +364,40 @@ class OFCPineappleState(pyspiel.State):
     def observation_string(self, player): return self.information_state_string(player)
 
     def clone(self):
-        cloned = type(self)(self._game)
-        cloned._num_players = self._num_players; cloned._current_player = self._current_player; cloned._dealer_button = self._dealer_button
-        cloned._next_player_to_act = self._next_player_to_act; cloned._player_to_deal_to = self._player_to_deal_to; cloned._phase = self._phase
-        cloned._fantasy_cards_count = self._fantasy_cards_count; cloned._fantasy_player_has_placed = self._fantasy_player_has_placed; cloned._game_over = self._game_over
-        cloned._deck = self._deck[:]; cloned._cards_to_place_count = self._cards_to_place_count[:]; cloned._cards_to_discard_count = self._cards_to_discard_count[:]
-        cloned._in_fantasy = self._in_fantasy[:]; cloned._can_enter_fantasy = self._can_enter_fantasy[:]; cloned._total_cards_placed = self._total_cards_placed[:]
-        cloned._cumulative_returns = self._cumulative_returns[:]; cloned._current_hand_returns = self._current_hand_returns[:]
-        cloned._board = copy.deepcopy(self._board); cloned._current_cards = copy.deepcopy(self._current_cards)
-        cloned._discards = copy.deepcopy(self._discards); cloned._fantasy_trigger = copy.deepcopy(self._fantasy_trigger)
+        """Создает глубокую копию состояния."""
+        # ИСПРАВЛЕНО: Используем self.get_game()
+        cloned = type(self)(self.get_game())
+
+        # Копируем неизменяемые или простые типы
+        cloned._num_players = self._num_players
+        cloned._current_player = self._current_player
+        cloned._dealer_button = self._dealer_button
+        cloned._next_player_to_act = self._next_player_to_act
+        cloned._player_to_deal_to = self._player_to_deal_to
+        cloned._phase = self._phase
+        cloned._fantasy_cards_count = self._fantasy_cards_count
+        cloned._fantasy_player_has_placed = self._fantasy_player_has_placed
+        cloned._game_over = self._game_over
+
+        # Копируем списки и словари
+        cloned._deck = self._deck[:] # Поверхностная копия списка чисел
+        cloned._cards_to_place_count = self._cards_to_place_count[:]
+        cloned._cards_to_discard_count = self._cards_to_discard_count[:]
+        cloned._in_fantasy = self._in_fantasy[:]
+        cloned._can_enter_fantasy = self._can_enter_fantasy[:]
+        cloned._total_cards_placed = self._total_cards_placed[:]
+        cloned._cumulative_returns = self._cumulative_returns[:]
+        cloned._current_hand_returns = self._current_hand_returns[:]
+
+        # Глубокие копии для вложенных структур
+        cloned._board = copy.deepcopy(self._board)
+        cloned._current_cards = copy.deepcopy(self._current_cards)
+        cloned._discards = copy.deepcopy(self._discards)
+        cloned._fantasy_trigger = copy.deepcopy(self._fantasy_trigger) # Хотя пока None
+
+        # Кэш не копируем, он будет пересоздан при необходимости
         cloned._cached_legal_actions = None
+
         return cloned
 
     def resample_from_infostate(self, player_id: int, probability_sampler) -> 'OFCPineappleState':
@@ -416,36 +438,16 @@ class OFCPineappleState(pyspiel.State):
         opponent_discard_count_needed = 0
         current_phase = self._phase
 
-        # Определяем, должен ли оппонент иметь карты в руке СЕЙЧАС
-        # (т.е. в фазе DEAL_Opponent или PLACE_Opponent на улицах 2-5)
-        # Важно: _current_cards оппонента в оригинальном состоянии могут быть пустыми,
-        # но если фаза подразумевает, что у него ДОЛЖНЫ быть карты, мы их сэмплируем.
         if opponent_id == 1: # Оппонент - P2
-            if current_phase in [STREET_SECOND_DEAL_P2, STREET_SECOND_PLACE_P2,
-                                 STREET_THIRD_DEAL_P2, STREET_THIRD_PLACE_P2,
-                                 STREET_FOURTH_DEAL_P2, STREET_FOURTH_PLACE_P2,
-                                 STREET_FIFTH_DEAL_P2, STREET_FIFTH_PLACE_P2]:
-                # Если это фаза PLACE оппонента, у него уже нет карт в руке.
-                # Карты нужны только если это фаза DEAL оппонента.
-                if current_phase % 2 != 0: # DEAL phase
-                    opponent_hand_size_needed = 3
-        else: # Оппонент - P1
-            if current_phase in [STREET_SECOND_DEAL_P1, STREET_SECOND_PLACE_P1,
-                                 STREET_THIRD_DEAL_P1, STREET_THIRD_PLACE_P1,
-                                 STREET_FOURTH_DEAL_P1, STREET_FOURTH_PLACE_P1,
-                                 STREET_FIFTH_DEAL_P1, STREET_FIFTH_PLACE_P1]:
-                if current_phase % 2 != 0: # DEAL phase
-                    opponent_hand_size_needed = 3
-
-        # Определяем, сколько карт оппонент УЖЕ ДОЛЖЕН БЫЛ сбросить
-        # (по одной за каждую ЗАВЕРШЕННУЮ улицу, начиная со второй)
-        if opponent_id == 1: # Оппонент - P2
+            if current_phase in [STREET_SECOND_DEAL_P2, STREET_THIRD_DEAL_P2, STREET_FOURTH_DEAL_P2, STREET_FIFTH_DEAL_P2]:
+                opponent_hand_size_needed = 3
             if current_phase > STREET_SECOND_PLACE_P2: opponent_discard_count_needed += 1
             if current_phase > STREET_THIRD_PLACE_P2: opponent_discard_count_needed += 1
             if current_phase > STREET_FOURTH_PLACE_P2: opponent_discard_count_needed += 1
             if current_phase > STREET_FIFTH_PLACE_P2: opponent_discard_count_needed += 1
         else: # Оппонент - P1
-            # P1 сбрасывает после фаз PLACE_P1 (2, 6, 10, 14, 18)
+            if current_phase in [STREET_SECOND_DEAL_P1, STREET_THIRD_DEAL_P1, STREET_FOURTH_DEAL_P1, STREET_FIFTH_DEAL_P1]:
+                opponent_hand_size_needed = 3
             if current_phase > STREET_SECOND_PLACE_P1: opponent_discard_count_needed += 1
             if current_phase > STREET_THIRD_PLACE_P1: opponent_discard_count_needed += 1
             if current_phase > STREET_FOURTH_PLACE_P1: opponent_discard_count_needed += 1
@@ -456,8 +458,7 @@ class OFCPineappleState(pyspiel.State):
             # Рука оппонента (если нужна)
             cloned_state._current_cards[opponent_id] = [next(unknown_cards_iter) for _ in range(opponent_hand_size_needed)]
             # Сброс оппонента (заполняем недостающие)
-            # Важно: мы не знаем, какие карты он сбросил, поэтому просто берем из пула
-            num_discards_to_sample = opponent_discard_count_needed - len(cloned_state._discards[opponent_id]) # На случай, если клон уже что-то содержит (не должен)
+            num_discards_to_sample = opponent_discard_count_needed - len(cloned_state._discards[opponent_id])
             cloned_state._discards[opponent_id].extend([next(unknown_cards_iter) for _ in range(num_discards_to_sample)])
             # Колода
             cloned_state._deck = list(unknown_cards_iter) # Оставшиеся карты
