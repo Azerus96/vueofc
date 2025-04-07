@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с ПРАВИЛЬНЫМ chance_outcomes (v10), resample_from_infostate, action_to_string и clone
+# Версия с ИСПРАВЛЕННЫМ синтаксисом в resample_from_infostate (v11), chance_outcomes, action_to_string и clone
 
 import pyspiel
 import numpy as np
@@ -318,39 +318,56 @@ class OFCPineappleState(pyspiel.State):
 
         num_remaining_cards = len(self._deck)
         if num_remaining_cards == 0:
-            # Это может произойти, если колода пуста, но игра еще не в терминальной фазе
-            # (например, ошибка в логике перехода фаз)
             print(f"Warning: Chance node called with empty deck in phase {self._phase}")
             return []
 
         prob = 1.0 / num_remaining_cards
         # Возвращаем список (карта, вероятность) для каждой карты в колоде.
-        # Алгоритмы MCTS/Rollout будут использовать этот список для сэмплирования
-        # одного исхода (карты), который затем передается в apply_action.
-        # Наша apply_action для шанс-узла игнорирует этот аргумент и берет
-        # карты напрямую из self._deck, что является допустимым упрощением,
-        # но chance_outcomes все равно должен возвращать правильный список исходов.
+        # Исход шанса - это сама карта (int).
         return [(card, prob) for card in self._deck]
 
     def resample_from_infostate(self, player_id: int, probability_sampler) -> 'OFCPineappleState':
-        # ... (Без изменений, использует локальный np.random.RandomState) ...
+        """
+        Создает новое состояние, сэмплируя неизвестную информацию (детерминизация).
+        Использует np.random.RandomState для перемешивания. probability_sampler игнорируется.
+        """
         if not (0 <= player_id < self._num_players): raise ValueError(f"Неверный player_id: {player_id}")
         opponent_id = 1 - player_id
+
+        # 1. Определить известные карты
         known_cards: Set[int] = set()
         known_cards.update(c for c in self._board[player_id] if c != -1); known_cards.update(c for c in self._current_cards[player_id] if c != -1); known_cards.update(c for c in self._discards[player_id] if c != -1)
         known_cards.update(c for c in self._board[opponent_id] if c != -1)
         if self._phase == STREET_FIRST_DEAL_P2 and player_id == 0: known_cards.update(c for c in self._current_cards[opponent_id] if c != -1)
         elif self._phase == STREET_FIRST_PLACE_P1 and player_id == 1: known_cards.update(c for c in self._current_cards[opponent_id] if c != -1)
+
+        # 2. Определить неизвестные карты
         all_cards = set(range(NUM_CARDS)); unknown_cards_set = all_cards - known_cards; unknown_cards_list = list(unknown_cards_set)
+
+        # 3. Перемешать неизвестные карты
         rng = np.random.RandomState(); rng.shuffle(unknown_cards_list); unknown_cards_iter = iter(unknown_cards_list)
+
+        # 4. Создать клон состояния
         cloned_state = self.clone()
+
+        # 5. Определить потребности оппонента
         opponent_hand_size_needed = 0; opponent_discard_count_needed = 0; current_phase = self._phase
         if opponent_id == 1: # Оппонент - P2
             if current_phase in [STREET_SECOND_DEAL_P2, STREET_THIRD_DEAL_P2, STREET_FOURTH_DEAL_P2, STREET_FIFTH_DEAL_P2]: opponent_hand_size_needed = 3
-            if current_phase > STREET_SECOND_PLACE_P2: opponent_discard_count_needed += 1; if current_phase > STREET_THIRD_PLACE_P2: opponent_discard_count_needed += 1; if current_phase > STREET_FOURTH_PLACE_P2: opponent_discard_count_needed += 1; if current_phase > STREET_FIFTH_PLACE_P2: opponent_discard_count_needed += 1
+            # ИСПРАВЛЕНО v11: Раздельные if для подсчета сброса
+            if current_phase > STREET_SECOND_PLACE_P2: opponent_discard_count_needed += 1
+            if current_phase > STREET_THIRD_PLACE_P2: opponent_discard_count_needed += 1
+            if current_phase > STREET_FOURTH_PLACE_P2: opponent_discard_count_needed += 1
+            if current_phase > STREET_FIFTH_PLACE_P2: opponent_discard_count_needed += 1
         else: # Оппонент - P1
             if current_phase in [STREET_SECOND_DEAL_P1, STREET_THIRD_DEAL_P1, STREET_FOURTH_DEAL_P1, STREET_FIFTH_DEAL_P1]: opponent_hand_size_needed = 3
-            if current_phase > STREET_SECOND_PLACE_P1: opponent_discard_count_needed += 1; if current_phase > STREET_THIRD_PLACE_P1: opponent_discard_count_needed += 1; if current_phase > STREET_FOURTH_PLACE_P1: opponent_discard_count_needed += 1; if current_phase > STREET_FIFTH_PLACE_P1: opponent_discard_count_needed += 1
+            # ИСПРАВЛЕНО v11: Раздельные if для подсчета сброса
+            if current_phase > STREET_SECOND_PLACE_P1: opponent_discard_count_needed += 1
+            if current_phase > STREET_THIRD_PLACE_P1: opponent_discard_count_needed += 1
+            if current_phase > STREET_FOURTH_PLACE_P1: opponent_discard_count_needed += 1
+            if current_phase > STREET_FIFTH_PLACE_P1: opponent_discard_count_needed += 1
+
+        # 6. Заполнить неизвестное в клоне
         try:
             cloned_state._current_cards[opponent_id] = [next(unknown_cards_iter) for _ in range(opponent_hand_size_needed)]
             # ИСПРАВЛЕНО v7: Сброс оппонента (ЗАМЕНЯЕМ полностью)
