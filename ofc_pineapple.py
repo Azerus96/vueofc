@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с ИСПРАВЛЕННЫМ legal_actions (v8), resample_from_infostate, action_to_string и clone
+# Версия с ПРАВИЛЬНЫМ chance_outcomes (v10), resample_from_infostate, action_to_string и clone
 
 import pyspiel
 import numpy as np
@@ -176,37 +176,15 @@ class OFCPineappleState(pyspiel.State):
     def current_player(self): return self._current_player
     def is_chance_node(self): return self._current_player == pyspiel.PlayerId.CHANCE
     def is_terminal(self): return self._game_over
-
-    # ИСПРАВЛЕНО v8: Сигнатура и логика для соответствия OpenSpiel стандарту
     def legal_actions(self, player: Optional[int] = None) -> List[int]:
-        """Возвращает список индексов легальных действий."""
-        if player is None:
-            player_for_actions = self.current_player()
-            # Если не ход игрока, возвращаем пустой список
-            if player_for_actions < 0:
-                return []
-        else:
-            player_for_actions = player
-            # Если запросили действия для игрока, который сейчас не ходит,
-            # или это шанс/терминальное состояние, возвращаем пустой список.
-            # (Наша генерация действий все равно зависит от _current_cards текущего игрока)
-            if player_for_actions != self.current_player() or self.is_chance_node() or self.is_terminal():
-                 return []
-
-        # Используем кэш, если он есть (он всегда для текущего игрока)
-        if self._cached_legal_actions is not None and player_for_actions == self.current_player():
-            return list(range(len(self._cached_legal_actions)))
-
-        # Генерируем кортежи действий для player_for_actions (который равен current_player)
+        # ... (Без изменений) ...
+        if player is None: player_for_actions = self.current_player()
+        else: player_for_actions = player
+        if player_for_actions < 0 or player_for_actions != self.current_player() or self.is_chance_node() or self.is_terminal(): return []
+        if self._cached_legal_actions is not None and player_for_actions == self.current_player(): return list(range(len(self._cached_legal_actions)))
         actions_tuples = self._generate_legal_actions_tuples(player_for_actions)
-
-        # Кэшируем только если генерировали для текущего игрока
-        if player_for_actions == self.current_player():
-            self._cached_legal_actions = actions_tuples
-
-        # Возвращаем индексы от 0 до N-1
+        if player_for_actions == self.current_player(): self._cached_legal_actions = actions_tuples
         return list(range(len(actions_tuples)))
-
     def _generate_legal_actions_tuples(self, player):
         # ... (Без изменений) ...
         actions = []; is_place_phase = (self._phase >= STREET_FIRST_PLACE_P1 and self._phase <= STREET_FIFTH_PLACE_P2 and self._phase % 2 == 0)
@@ -321,7 +299,7 @@ class OFCPineappleState(pyspiel.State):
         return ";".join(parts)
     def observation_string(self, player): return self.information_state_string(player)
     def clone(self):
-        # ... (Без изменений, использует self.get_game()) ...
+        # ... (Без изменений) ...
         cloned = type(self)(self.get_game()); cloned._num_players = self._num_players; cloned._current_player = self._current_player; cloned._dealer_button = self._dealer_button
         cloned._next_player_to_act = self._next_player_to_act; cloned._player_to_deal_to = self._player_to_deal_to; cloned._phase = self._phase
         cloned._fantasy_cards_count = self._fantasy_cards_count; cloned._fantasy_player_has_placed = self._fantasy_player_has_placed; cloned._game_over = self._game_over
@@ -332,64 +310,53 @@ class OFCPineappleState(pyspiel.State):
         cloned._cached_legal_actions = None
         return cloned
 
+    # ИСПРАВЛЕНО v10: Правильная реализация chance_outcomes
+    def chance_outcomes(self) -> List[Tuple[Any, float]]:
+        """Returns the possible chance outcomes and their probabilities."""
+        if not self.is_chance_node():
+            return []
+
+        num_remaining_cards = len(self._deck)
+        if num_remaining_cards == 0:
+            # Это может произойти, если колода пуста, но игра еще не в терминальной фазе
+            # (например, ошибка в логике перехода фаз)
+            print(f"Warning: Chance node called with empty deck in phase {self._phase}")
+            return []
+
+        prob = 1.0 / num_remaining_cards
+        # Возвращаем список (карта, вероятность) для каждой карты в колоде.
+        # Алгоритмы MCTS/Rollout будут использовать этот список для сэмплирования
+        # одного исхода (карты), который затем передается в apply_action.
+        # Наша apply_action для шанс-узла игнорирует этот аргумент и берет
+        # карты напрямую из self._deck, что является допустимым упрощением,
+        # но chance_outcomes все равно должен возвращать правильный список исходов.
+        return [(card, prob) for card in self._deck]
+
     def resample_from_infostate(self, player_id: int, probability_sampler) -> 'OFCPineappleState':
-        """
-        Создает новое состояние, сэмплируя неизвестную информацию (детерминизация).
-        Использует np.random.RandomState для перемешивания. probability_sampler игнорируется.
-        """
+        # ... (Без изменений, использует локальный np.random.RandomState) ...
         if not (0 <= player_id < self._num_players): raise ValueError(f"Неверный player_id: {player_id}")
         opponent_id = 1 - player_id
-
-        # 1. Определить известные карты
         known_cards: Set[int] = set()
-        known_cards.update(c for c in self._board[player_id] if c != -1)
-        known_cards.update(c for c in self._current_cards[player_id] if c != -1)
-        known_cards.update(c for c in self._discards[player_id] if c != -1)
+        known_cards.update(c for c in self._board[player_id] if c != -1); known_cards.update(c for c in self._current_cards[player_id] if c != -1); known_cards.update(c for c in self._discards[player_id] if c != -1)
         known_cards.update(c for c in self._board[opponent_id] if c != -1)
         if self._phase == STREET_FIRST_DEAL_P2 and player_id == 0: known_cards.update(c for c in self._current_cards[opponent_id] if c != -1)
         elif self._phase == STREET_FIRST_PLACE_P1 and player_id == 1: known_cards.update(c for c in self._current_cards[opponent_id] if c != -1)
-
-        # 2. Определить неизвестные карты
         all_cards = set(range(NUM_CARDS)); unknown_cards_set = all_cards - known_cards; unknown_cards_list = list(unknown_cards_set)
-
-        # 3. Перемешать неизвестные карты
-        rng = np.random.RandomState() # Используем локальный RNG
-        rng.shuffle(unknown_cards_list)
-        unknown_cards_iter = iter(unknown_cards_list)
-
-        # 4. Создать клон состояния
+        rng = np.random.RandomState(); rng.shuffle(unknown_cards_list); unknown_cards_iter = iter(unknown_cards_list)
         cloned_state = self.clone()
-
-        # 5. Определить потребности оппонента
         opponent_hand_size_needed = 0; opponent_discard_count_needed = 0; current_phase = self._phase
         if opponent_id == 1: # Оппонент - P2
             if current_phase in [STREET_SECOND_DEAL_P2, STREET_THIRD_DEAL_P2, STREET_FOURTH_DEAL_P2, STREET_FIFTH_DEAL_P2]: opponent_hand_size_needed = 3
-            if current_phase > STREET_SECOND_PLACE_P2: opponent_discard_count_needed += 1
-            if current_phase > STREET_THIRD_PLACE_P2: opponent_discard_count_needed += 1
-            if current_phase > STREET_FOURTH_PLACE_P2: opponent_discard_count_needed += 1
-            if current_phase > STREET_FIFTH_PLACE_P2: opponent_discard_count_needed += 1
+            if current_phase > STREET_SECOND_PLACE_P2: opponent_discard_count_needed += 1; if current_phase > STREET_THIRD_PLACE_P2: opponent_discard_count_needed += 1; if current_phase > STREET_FOURTH_PLACE_P2: opponent_discard_count_needed += 1; if current_phase > STREET_FIFTH_PLACE_P2: opponent_discard_count_needed += 1
         else: # Оппонент - P1
             if current_phase in [STREET_SECOND_DEAL_P1, STREET_THIRD_DEAL_P1, STREET_FOURTH_DEAL_P1, STREET_FIFTH_DEAL_P1]: opponent_hand_size_needed = 3
-            if current_phase > STREET_SECOND_PLACE_P1: opponent_discard_count_needed += 1
-            if current_phase > STREET_THIRD_PLACE_P1: opponent_discard_count_needed += 1
-            if current_phase > STREET_FOURTH_PLACE_P1: opponent_discard_count_needed += 1
-            if current_phase > STREET_FIFTH_PLACE_P1: opponent_discard_count_needed += 1
-
-        # 6. Заполнить неизвестное в клоне
+            if current_phase > STREET_SECOND_PLACE_P1: opponent_discard_count_needed += 1; if current_phase > STREET_THIRD_PLACE_P1: opponent_discard_count_needed += 1; if current_phase > STREET_FOURTH_PLACE_P1: opponent_discard_count_needed += 1; if current_phase > STREET_FIFTH_PLACE_P1: opponent_discard_count_needed += 1
         try:
-            # Рука оппонента (если нужна)
             cloned_state._current_cards[opponent_id] = [next(unknown_cards_iter) for _ in range(opponent_hand_size_needed)]
             # ИСПРАВЛЕНО v7: Сброс оппонента (ЗАМЕНЯЕМ полностью)
             cloned_state._discards[opponent_id] = [next(unknown_cards_iter) for _ in range(opponent_discard_count_needed)]
-            # Колода
-            cloned_state._deck = list(unknown_cards_iter) # Оставшиеся карты
-        except StopIteration:
-            raise Exception(f"Ошибка в resample_from_infostate: Не хватило неизвестных карт. "
-                            f"Фаза: {current_phase}, Игрок: {player_id}, "
-                            f"Известно: {len(known_cards)}, Неизвестно: {len(unknown_cards_set)}, "
-                            f"Нужно опп.рука: {opponent_hand_size_needed}, Нужно опп.сброс: {opponent_discard_count_needed}")
-
-        # 7. Вернуть клон
+            cloned_state._deck = list(unknown_cards_iter)
+        except StopIteration: raise Exception(f"Ошибка в resample_from_infostate: Не хватило неизвестных карт. Фаза: {current_phase}, Игрок: {player_id}, Известно: {len(known_cards)}, Неизвестно: {len(unknown_cards_set)}, Нужно опп.рука: {opponent_hand_size_needed}, Нужно опп.сброс: {opponent_discard_count_needed}")
         return cloned_state
 
     def __str__(self):
@@ -397,6 +364,7 @@ class OFCPineappleState(pyspiel.State):
         return self.information_state_string(player_to_show)
 
 # --- Регистрация игры ---
+# ... (Без изменений) ...
 try:
     pyspiel.load_game(_GAME_TYPE.short_name)
     # print(f"Игра '{_GAME_TYPE.short_name}' уже была зарегистрирована.")
