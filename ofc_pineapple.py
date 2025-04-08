@@ -1,5 +1,5 @@
 # OFC Pineapple Poker Game Implementation for OpenSpiel
-# Версия с ОТЛАДКОЙ завершения игры (v14.1), chance_outcomes, resample_from_infostate, action_to_string и clone
+# Версия с ИСПРАВЛЕННЫМ legal_actions (v15), chance_outcomes, resample_from_infostate, action_to_string и clone
 
 import pyspiel
 import numpy as np
@@ -21,8 +21,7 @@ STREET_SECOND_DEAL_P1 = 5; STREET_SECOND_PLACE_P1 = 6; STREET_SECOND_DEAL_P2 = 7
 STREET_THIRD_DEAL_P1 = 9; STREET_THIRD_PLACE_P1 = 10; STREET_THIRD_DEAL_P2 = 11; STREET_THIRD_PLACE_P2 = 12
 STREET_FOURTH_DEAL_P1 = 13; STREET_FOURTH_PLACE_P1 = 14; STREET_FOURTH_DEAL_P2 = 15; STREET_FOURTH_PLACE_P2 = 16
 STREET_FIFTH_DEAL_P1 = 17; STREET_FIFTH_PLACE_P1 = 18; STREET_FIFTH_DEAL_P2 = 19; STREET_FIFTH_PLACE_P2 = 20
-STREET_REGULAR_SHOWDOWN = 21 # Фаза после подсчета очков (терминальная или переход к Fantasy)
-# Фазы Fantasyland (пока не используются активно в переходах)
+STREET_REGULAR_SHOWDOWN = 21
 PHASE_FANTASY_SETUP = 30; PHASE_FANTASY_N_DEAL_1 = 31; PHASE_FANTASY_N_PLACE_1 = 32
 PHASE_FANTASY_N_DEAL_2 = 33; PHASE_FANTASY_N_PLACE_2 = 34; PHASE_FANTASY_N_DEAL_3 = 35; PHASE_FANTASY_N_PLACE_3 = 36
 PHASE_FANTASY_N_DEAL_4 = 37; PHASE_FANTASY_N_PLACE_4 = 38; PHASE_FANTASY_N_DEAL_5 = 39; PHASE_FANTASY_N_PLACE_5 = 40
@@ -187,16 +186,15 @@ class OFCPineappleState(pyspiel.State):
                             # Не последняя улица, переходим к сдаче P1
                             next_phase = current_phase + 1; self._current_player = pyspiel.PlayerId.CHANCE; self._player_to_deal_to = self._next_player_to_act
 
-        # --- Логика Шоудауна и перехода к Fantasy/Концу игры ---
+        # --- Логика Шоудауна и завершения игры (пока без Fantasy) ---
         elif current_phase == STREET_REGULAR_SHOWDOWN:
             # Сюда мы попадаем только после перехода из STREET_FIFTH_PLACE_P2
             # _game_over уже должен быть установлен в True, если не было Fantasy
             if not self._game_over:
-                 # Если мы здесь и игра не окончена, значит сработал Fantasy
                  # TODO: Переход к PHASE_FANTASY_SETUP
                  print("Warning: Переход в Fantasyland еще не реализован, завершаем игру.")
-                 self._game_over = True # Завершаем игру, т.к. Fantasy не реализован
-                 next_phase = current_phase # Остаемся в этой фазе
+                 self._game_over = True
+                 next_phase = current_phase
                  self._current_player = pyspiel.PlayerId.TERMINAL
             else:
                 # Игра окончена, остаемся в этой фазе
@@ -229,14 +227,39 @@ class OFCPineappleState(pyspiel.State):
     def current_player(self): return self._current_player
     def is_chance_node(self): return self._current_player == pyspiel.PlayerId.CHANCE
     def is_terminal(self): return self._game_over
+
+    # ИСПРАВЛЕНО v15: Корректная проверка player_for_actions
     def legal_actions(self, player: Optional[int] = None) -> List[int]:
-        # ... (Без изменений) ...
-        if player is None: player_for_actions = self.current_player()
-        else: player_for_actions = player
-        if player_for_actions < 0 or player_for_actions != self.current_player() or self.is_chance_node() or self.is_terminal(): return []
-        if self._cached_legal_actions is not None and player_for_actions == self.current_player(): return list(range(len(self._cached_legal_actions)))
+        """Возвращает список индексов легальных действий."""
+        current_player = self.current_player()
+
+        # Определяем, для какого игрока запрашиваются действия
+        if player is None:
+            player_for_actions = current_player
+        else:
+            player_for_actions = player
+
+        # Проверяем, является ли запрашиваемый игрок действительным игроком (0 или 1)
+        # и является ли он текущим игроком, если это не шанс/терминальный узел
+        is_valid_player_id = isinstance(player_for_actions, int) and 0 <= player_for_actions < self._num_players
+
+        if not is_valid_player_id or \
+           player_for_actions != current_player or \
+           self.is_chance_node() or \
+           self.is_terminal():
+            return []
+
+        # Используем кэш, если он есть (он всегда для текущего игрока)
+        if self._cached_legal_actions is not None: # Кэш всегда для self.current_player()
+            return list(range(len(self._cached_legal_actions)))
+
+        # Генерируем кортежи действий для player_for_actions (который равен current_player)
         actions_tuples = self._generate_legal_actions_tuples(player_for_actions)
-        if player_for_actions == self.current_player(): self._cached_legal_actions = actions_tuples
+
+        # Кэшируем
+        self._cached_legal_actions = actions_tuples
+
+        # Возвращаем индексы от 0 до N-1
         return list(range(len(actions_tuples)))
 
     def _generate_legal_actions_tuples(self, player):
@@ -370,7 +393,7 @@ class OFCPineappleState(pyspiel.State):
         if not self._game_over: return [0.0] * self._num_players
         return self._cumulative_returns
     def information_state_string(self, player: int) -> str:
-        # ... (Без изменений) ...
+        # ИЗМЕНЕНО v12: Добавлена информация о Fantasyland
         if player < 0 or player >= self._num_players: return f"Phase:{self._phase};GameOver:{self._game_over}"
         parts = []; parts.append(f"P:{player}"); parts.append(f"Ph:{self._phase}")
         my_board_cards = self._board[player]; my_board_str = f"B:[{' '.join(cards_to_strings(my_board_cards[:3]))}|{' '.join(cards_to_strings(my_board_cards[3:8]))}|{' '.join(cards_to_strings(my_board_cards[8:]))}]"; parts.append(my_board_str)
@@ -390,7 +413,7 @@ class OFCPineappleState(pyspiel.State):
         return ";".join(parts)
     def observation_string(self, player): return self.information_state_string(player)
     def clone(self):
-        # ... (Без изменений) ...
+        # ИЗМЕНЕНО v12: Копируем новые переменные
         cloned = type(self)(self.get_game()); cloned._num_players = self._num_players; cloned._current_player = self._current_player; cloned._dealer_button = self._dealer_button
         cloned._next_player_to_act = self._next_player_to_act; cloned._player_to_deal_to = self._player_to_deal_to; cloned._phase = self._phase
         cloned._fantasy_cards_count = self._fantasy_cards_count; cloned._game_over = self._game_over
