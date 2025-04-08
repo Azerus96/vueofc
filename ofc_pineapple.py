@@ -433,7 +433,7 @@ class OFCPineappleState(pyspiel.State):
             scores[p0] = line_scores[p0] + scoop_bonus[p0] + royalties[p0]; scores[p1] = line_scores[p1] + scoop_bonus[p1] + royalties[p1]
         diff = scores[p0] - scores[p1]; self._current_hand_returns = [diff, -diff]; self._cumulative_returns[0] += diff; self._cumulative_returns[1] -= diff
 
-    # ИЗМЕНЕНО v12: Реализация _check_and_setup_fantasy
+    # ИЗМЕНЕНО v15: Реализация _check_and_setup_fantasy
     def _check_and_setup_fantasy(self) -> bool:
         """Проверяет условия для Fantasyland и устанавливает флаги для *следующей* руки."""
         self._next_fantasy_players = [] # Очищаем список перед проверкой
@@ -446,6 +446,7 @@ class OFCPineappleState(pyspiel.State):
         for p in range(self._num_players):
             if not is_dead[p]: # Проверяем только живые руки
                 top_eval = evals[p]['top']
+                # Проверяем QQ+ или сет на топе
                 if (top_eval[0] == PAIR and top_eval[1][0] >= FANTASY_TRIGGER_RANK) or \
                    (top_eval[0] == THREE_OF_A_KIND):
                     self._next_fantasy_players.append(p)
@@ -457,7 +458,7 @@ class OFCPineappleState(pyspiel.State):
         if not self._game_over: return [0.0] * self._num_players
         return self._cumulative_returns
     def information_state_string(self, player: int) -> str:
-        # ИЗМЕНЕНО v12: Добавлена информация о Fantasyland
+        # ИЗМЕНЕНО v15: Добавлена информация о Fantasyland
         if player < 0 or player >= self._num_players: return f"Phase:{self._phase};GameOver:{self._game_over}"
         parts = []; parts.append(f"P:{player}"); parts.append(f"Ph:{self._phase}")
         my_board_cards = self._board[player]; my_board_str = f"B:[{' '.join(cards_to_strings(my_board_cards[:3]))}|{' '.join(cards_to_strings(my_board_cards[3:8]))}|{' '.join(cards_to_strings(my_board_cards[8:]))}]"; parts.append(my_board_str)
@@ -499,7 +500,7 @@ class OFCPineappleState(pyspiel.State):
         return [(card, prob) for card in self._deck]
 
     def resample_from_infostate(self, player_id: int, probability_sampler) -> 'OFCPineappleState':
-        # ИСПРАВЛЕНО v11: Исправлен синтаксис подсчета сброса
+        # ... (Без изменений) ...
         if not (0 <= player_id < self._num_players): raise ValueError(f"Неверный player_id: {player_id}")
         opponent_id = 1 - player_id
         known_cards: Set[int] = set()
